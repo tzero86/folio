@@ -14,7 +14,7 @@ export interface DownloadStatusPayload {
 }
 
 export async function downloadBooks(settings: AppSettings, identifiers: string[]): Promise<void> {
-  return invoke("download_books", { ...settings, identifiers });
+  return invoke("download_books", { request: { ...settings, identifiers } });
 }
 
 export function onDownloadStatus(callback: (payload: DownloadStatusPayload) => void) {
