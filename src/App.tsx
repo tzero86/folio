@@ -14,10 +14,11 @@ import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { ToastContainer, useToast } from "./components/ui/Toast";
+import { createTtlCache } from "./lib/cache";
 import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
-import type { QueueItem, AppSettings } from "./types";
+import type { QueueItem, AppSettings, BookMetadata } from "./types";
 import "./index.css";
 
 type Tab = "queue" | "search" | "library" | "settings";
@@ -35,6 +36,9 @@ function parseBookId(input: string): string {
   const match = trimmed.match(/archive\.org\/details\/([^/?#]+)/);
   return match?.[1] ?? trimmed.split("/").pop() ?? trimmed;
 }
+
+// Book metadata is immutable per identifier; cache it for the session (30 min TTL).
+const metadataCache = createTtlCache<BookMetadata>(30 * 60 * 1000);
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("queue");
@@ -73,8 +77,10 @@ export default function App() {
     setItems((prev) => [newItem, ...prev]);
     setSelectedId(id);
     try {
-      const metadata = await fetchBookMetadata(identifier);
-      addLog("info", `Fetched metadata for ${identifier}`, JSON.stringify(metadata, null, 2));
+      const cached = metadataCache.get(identifier);
+      const metadata = cached ?? (await fetchBookMetadata(identifier));
+      if (!cached) metadataCache.set(identifier, metadata);
+      addLog("info", cached ? `Loaded cached metadata for ${identifier}` : `Fetched metadata for ${identifier}`, JSON.stringify(metadata, null, 2));
       setItems((prev) =>
         prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
       );

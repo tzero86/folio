@@ -3,7 +3,8 @@ import { Search, Plus, Loader2, FileText } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { searchArchive } from "../../lib/tauri";
-import type { SearchResult } from "../../types";
+import { createTtlCache } from "../../lib/cache";
+import type { SearchResult, SearchResponse } from "../../types";
 import type { ToastType } from "../ui/Toast";
 
 interface SearchPanelProps {
@@ -12,6 +13,8 @@ interface SearchPanelProps {
 }
 
 const ROWS = 50;
+// Re-searching the same query+page within 10 minutes hits this instead of the network.
+const searchCache = createTtlCache<SearchResponse>(10 * 60 * 1000);
 
 export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
   const [query, setQuery] = useState("");
@@ -28,8 +31,18 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
       if (!q) return;
       setLoading(true);
       setSearched(true);
+      const cacheKey = `${q}|${pageToLoad}|${ROWS}`;
+      const cached = searchCache.get(cacheKey);
+      if (cached) {
+        setResults(cached.docs);
+        setNumFound(cached.num_found);
+        setPage(pageToLoad);
+        setLoading(false);
+        return;
+      }
       try {
         const resp = await searchArchive(q, pageToLoad, ROWS);
+        searchCache.set(cacheKey, resp);
         setResults(resp.docs);
         setNumFound(resp.num_found);
         setPage(pageToLoad);
