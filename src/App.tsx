@@ -11,6 +11,7 @@ import { LibraryPanel } from "./components/library/LibraryPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
+import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { fetchBookMetadata, onDownloadStatus, downloadBooks } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
@@ -38,6 +39,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const storeRef = useRef<Store | null>(null);
+  const { logs, addLog, clearLogs } = useDebugConsole();
   const [settings, setSettings] = useState<AppSettings>({
     email: "",
     password: "",
@@ -54,6 +56,7 @@ export default function App() {
   itemsRef.current = items;
 
   const addItem = useCallback(async (input: string) => {
+    addLog("info", `Adding item: ${input}`);
     const id = crypto.randomUUID();
     const identifier = parseBookId(input);
     const newItem: QueueItem = {
@@ -66,19 +69,22 @@ export default function App() {
     setSelectedId(id);
     try {
       const metadata = await fetchBookMetadata(identifier);
+      addLog("info", `Fetched metadata for ${identifier}`, JSON.stringify(metadata, null, 2));
       setItems((prev) =>
         prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
       );
     } catch (e) {
+      const err = String(e);
+      addLog("error", `Metadata fetch failed for ${identifier}`, err);
       setItems((prev) =>
         prev.map((item) =>
           item.id === id
-            ? { ...item, status: "error", error: String(e), metadata: { identifier, title: identifier } }
+            ? { ...item, status: "error", error: err, metadata: { identifier, title: identifier } }
             : item
         )
       );
     }
-  }, []);
+  }, [addLog]);
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -91,6 +97,7 @@ export default function App() {
   }, []);
 
   const startDownload = useCallback(async () => {
+    addLog("info", "Starting downloads", JSON.stringify(settings));
     const pending = itemsRef.current.filter((item) => item.status !== "done" && item.status !== "error");
     if (pending.length === 0) return;
     const ids = pending.map((item) => item.id);
@@ -101,13 +108,15 @@ export default function App() {
     try {
       await downloadBooks(settings, identifiers);
     } catch (e) {
+      const err = String(e);
+      addLog("error", "Download batch failed", err);
       setItems((prev) =>
         prev.map((item) =>
-          ids.includes(item.id) ? { ...item, status: "error", error: String(e) } : item
+          ids.includes(item.id) ? { ...item, status: "error", error: err } : item
         )
       );
     }
-  }, [settings]);
+  }, [settings, addLog]);
 
   const startSingleDownload = useCallback(
     async (id: string) => {
@@ -127,6 +136,7 @@ export default function App() {
   );
 
   const handleStatus = useCallback((payload: { id: string; status: string; pdf?: string; message?: string }) => {
+    addLog("debug", `Status ${payload.status} for ${payload.id}`, JSON.stringify(payload));
     setItems((prev) => {
       const match = prev.find((item) => item.metadata?.identifier === payload.id);
       if (!match) return prev;
@@ -138,7 +148,7 @@ export default function App() {
         return item;
       });
     });
-  }, []);
+  }, [addLog]);
 
   useEffect(() => {
     const unlisten = onDownloadStatus(handleStatus);
@@ -160,6 +170,7 @@ export default function App() {
       storeRef.current = store;
       const saved = await store.get<AppSettings>("settings");
       if (saved) {
+        addLog("info", "Loaded saved settings", JSON.stringify(saved));
         setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
       }
     };
@@ -170,6 +181,7 @@ export default function App() {
     const store = storeRef.current;
     if (!store) return;
     setSaveStatus("saving");
+    addLog("info", "Saving settings");
     await store.set("settings", settings);
     await store.save();
     setSaveStatus("saved");
@@ -177,9 +189,13 @@ export default function App() {
   }, [settings]);
 
   const browseOutputDir = useCallback(async () => {
+    addLog("info", "Opening output directory picker");
     const dir = await openDialog({ directory: true });
-    if (dir) setSettings((prev) => ({ ...prev, outputDir: dir }));
-  }, []);
+    if (dir) {
+      addLog("info", `Selected output directory: ${dir}`);
+      setSettings((prev) => ({ ...prev, outputDir: dir }));
+    }
+  }, [addLog]);
 
   useShortcuts({
     addFromClipboard: () => {
@@ -285,6 +301,7 @@ export default function App() {
         onClose={() => setAboutOpen(false)}
         defaultTab={shortcutsOpen ? "shortcuts" : "about"}
       />
+      <DebugConsole logs={logs} onClear={clearLogs} />
     </div>
   );
 }
