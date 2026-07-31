@@ -20,6 +20,8 @@ export interface QueueItem {
   error?: string;
 }
 
+export type Tab = "queue" | "search" | "library" | "settings";
+
 export interface AppSettings {
   email: string;
   password: string;
@@ -29,6 +31,7 @@ export interface AppSettings {
   saveCredentials: boolean;
   saveMetadata: boolean;
   autoDownload: boolean;
+  defaultTab: Tab;
 }
 
 export interface SearchResult {

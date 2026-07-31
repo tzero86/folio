@@ -77,6 +77,20 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
           <p className="text-xs text-text-muted">Current scale: {settings.resolution}</p>
         </div>
 
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-text-secondary">Default page on launch</label>
+          <select
+            value={settings.defaultTab}
+            onChange={(e) => update("defaultTab", e.target.value as AppSettings["defaultTab"])}
+            className="flex h-10 w-full rounded-lg border border-border bg-bg-secondary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value="library">Library</option>
+            <option value="queue">Queue</option>
+            <option value="search">Search</option>
+            <option value="settings">Settings</option>
+          </select>
+        </div>
+
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-text-secondary">Create PDF</label>
           <input

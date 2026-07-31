@@ -18,10 +18,8 @@ import { metadataCache } from "./lib/cache";
 import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
-import type { QueueItem, AppSettings } from "./types";
+import type { QueueItem, AppSettings, Tab } from "./types";
 import "./index.css";
-
-type Tab = "queue" | "search" | "library" | "settings";
 
 const NAV: { id: Tab; label: string; icon: typeof List }[] = [
   { id: "queue", label: "Queue", icon: List },
@@ -54,6 +52,7 @@ export default function App() {
     saveCredentials: false,
     saveMetadata: false,
     autoDownload: true,
+    defaultTab: "library",
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -259,6 +258,7 @@ export default function App() {
         if (saved) {
           addLog("info", "Loaded saved settings", JSON.stringify(saved));
           setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
+          if (saved.defaultTab) setActiveTab(saved.defaultTab);
         } else {
           addLog("info", "No saved settings found");
         }
