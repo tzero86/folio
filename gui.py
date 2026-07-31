@@ -347,17 +347,12 @@ class App(ctk.CTk):
         self._settings_expanded = not self._settings_expanded
 
     def save_creds(self):
-        answer = messagebox.askyesno(
-            "Save Credentials",
-            "Credentials will be stored in plain text in config.json in the current folder.\n\n"
-            "Do you want to continue?"
-        )
-        if not answer:
+        if not messagebox.askyesno("Save Credentials", "Credentials will be stored in plain text in config.json.\n\nContinue?"):
             return
         save_credentials(self.user_entry.get(), self.pass_entry.get(), self.dir_entry.get())
-        dialog = ctk.CTkLabel(self, text="Credentials Saved!", fg_color="#10b981", text_color="white", corner_radius=6)
-        dialog.place(relx=0.5, rely=0.5, anchor="center")
-        self.after(2000, dialog.destroy)
+        label = ctk.CTkLabel(self.settings_body, text="Credentials saved", text_color=COLORS['success'], font=ctk.CTkFont(size=12))
+        label.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        self.after(2000, label.destroy)
 
     def browse_dir(self):
         d = filedialog.askdirectory(initialdir=self.dir_entry.get())
@@ -370,32 +365,49 @@ class App(ctk.CTk):
         if not text:
             return
 
-        if not text.startswith("https://archive.org/details/"):
-            self.item_entry.configure(border_color="red")
+        # Accept raw IDs too
+        url = text
+        if not url.startswith("http"):
+            url = f"https://archive.org/details/{text}"
+
+        if not url.startswith("https://archive.org/details/"):
+            self.url_error.configure(text="Enter a valid archive.org /details/ URL or book ID")
+            self.item_entry.configure(border_color=COLORS['danger'])
             return
 
-        self.item_entry.configure(border_color=["#979DA2", "#565B5E"])
+        self.url_error.configure(text="")
+        self.item_entry.configure(border_color=COLORS['border'])
 
-        row = ItemCard(self.list_scroll, text, self.remove_item)
-        self.items_list.append(row)
+        card = ItemCard(self.list_scroll, url, self.remove_item)
+        self.items_list.append(card)
         self.item_entry.delete(0, "end")
+        self._update_empty_state()
         self.update_list_header()
 
-    def remove_item(self, row_widget):
-        row_widget.destroy()
-        if row_widget in self.items_list:
-            self.items_list.remove(row_widget)
+    def remove_item(self, card: ItemCard):
+        card.destroy()
+        if card in self.items_list:
+            self.items_list.remove(card)
+        self._update_empty_state()
         self.update_list_header()
-    
+
     def clear_items(self):
-        for row in self.items_list:
-            row.destroy()
+        for card in self.items_list:
+            card.destroy()
         self.items_list.clear()
+        self._update_empty_state()
         self.update_list_header()
-        
+
+    def _update_empty_state(self):
+        if self.items_list:
+            self.empty_label.pack_forget()
+        else:
+            self.empty_label.pack(pady=40)
+
     def update_list_header(self):
         count = len(self.items_list)
-        self.list_label.configure(text=f"Download Queue ({count} items)")
+        self.list_label.configure(text=f"Download Queue ({count} item{'s' if count != 1 else ''})")
+        self.start_btn.configure(text=f"Download {count} Book{'s' if count != 1 else ''}")
 
     def print_output(self, text):
         self.output_text.configure(state="normal")
@@ -424,40 +436,48 @@ class App(ctk.CTk):
     def start_download(self):
         username = self.user_entry.get()
         password = self.pass_entry.get()
-        items = [row.url for row in self.items_list]
+        items = [card.url for card in self.items_list]
 
         if not items:
-            self.print_output("Error: Please add at least one item queue.\n")
+            self.print_output("Error: Please add at least one item to the queue.\n")
             return
-            
-        out_dir = self.dir_entry.get()
-        if not out_dir:
-            out_dir = os.getcwd()
 
-        # Advanced options
-        resolution_str = self.res_option.get().split(" ")[0] # "3 (Default)" -> "3"
+        out_dir = self.dir_entry.get() or os.getcwd()
+
         try:
-            resolution = int(resolution_str)
-        except:
+            resolution = int(self.res_option.get().split()[0])
+        except ValueError:
             resolution = 3
-            
-        generate_pdf = self.pdf_var.get()
+
+        jpg_output = not self.pdf_var.get()
         save_meta = self.meta_var.get()
-        jpg_output = not generate_pdf
+
+        for card in self.items_list:
+            card.set_status('queued')
 
         self.set_ui_enabled(False)
         self.progress_bar.set(0)
-        self.print_output(f"--- Starting Download for {len(items)} items ---\n")
-        
-        # Start worker
+        self.print_output(f"--- Starting Download for {len(items)} item{'s' if len(items) != 1 else ''} ---\n")
+
+        def status_callback(book_id: str, status: str, message: str = ""):
+            self.after(0, lambda: self._update_card_status(book_id, status, message))
+
         self._running_thread = threading.Thread(
-            target=self.worker, 
-            args=(username, password, items, out_dir, resolution, jpg_output, save_meta)
+            target=self.worker,
+            args=(username, password, items, out_dir, resolution, jpg_output, save_meta, status_callback)
         )
         self._running_thread.start()
         self.after(100, self.poll_queue)
 
-    def worker(self, username, password, items, out_dir, resolution, jpg_output, save_meta):
+    def _update_card_status(self, book_id: str, status: str, message: str = ""):
+        for card in self.items_list:
+            if card.book_id == book_id:
+                card.set_status(status)
+                if status == 'error' and message:
+                    self.print_output(f"[{book_id}] {message}\n")
+                break
+
+    def worker(self, username, password, items, out_dir, resolution, jpg_output, save_meta, status_callback):
         old_stdout = sys.stdout
         old_stderr = sys.stderr
         redirector = StdoutRedirector(self._output_queue)
@@ -472,7 +492,8 @@ class App(ctk.CTk):
                 output_dir=out_dir,
                 resolution=resolution,
                 jpg_output=jpg_output,
-                meta_output=save_meta
+                meta_output=save_meta,
+                status_callback=status_callback
             )
         except Exception as e:
             print(f"Detailed Error: {e}")
@@ -495,47 +516,46 @@ class App(ctk.CTk):
             pass
         self.after(100, self.poll_queue)
 
-    def set_ui_enabled(self, enabled):
+    def set_ui_enabled(self, enabled: bool):
         state = "normal" if enabled else "disabled"
         self.start_btn.configure(state=state)
         self.add_btn.configure(state=state)
-        # Disable clear button too during download
+        self.item_entry.configure(state=state)
         self.clear_btn.configure(state=state)
+        for card in self.items_list:
+            card.remove_btn.configure(state=state)
 
     def open_about(self):
         about_window = ctk.CTkToplevel(self)
         about_window.title("About")
-        about_window.geometry("450x550")
+        about_window.geometry("420x520")
         about_window.resizable(False, False)
-        
-        # Make modal
+        about_window.configure(fg_color=COLORS['bg_primary'])
         about_window.transient(self)
         about_window.grab_set()
 
-        # Logo
         try:
             ico_path = resource_path("app.ico")
             if os.path.exists(ico_path):
                 img = ctk.CTkImage(Image.open(ico_path), size=(64, 64))
-                ctk.CTkLabel(about_window, text="", image=img).pack(pady=(20, 10))
+                ctk.CTkLabel(about_window, text="", image=img).pack(pady=(24, 10))
         except Exception:
             pass
 
-        ctk.CTkLabel(about_window, text="Archive.org Downloader", font=ctk.CTkFont(size=22, weight="bold")).pack(pady=(5, 5))
-        ctk.CTkLabel(about_window, text="Version 1.1.0").pack(pady=2)
-        
-        # Scrollable Info Area
-        info_frame = ctk.CTkScrollableFrame(about_window, width=350, height=250, fg_color="transparent")
-        info_frame.pack(pady=15, padx=20, fill="both", expand=True)
-        
+        ctk.CTkLabel(about_window, text="Archive.org Downloader", font=ctk.CTkFont(size=22, weight="bold"), text_color=COLORS['text_primary']).pack()
+        ctk.CTkLabel(about_window, text="Version 1.2.0", text_color=COLORS['text_muted']).pack(pady=2)
+
+        info_frame = ctk.CTkScrollableFrame(about_window, width=340, height=240, fg_color=COLORS['bg_secondary'], corner_radius=8, border_color=COLORS['border'], border_width=1)
+        info_frame.pack(pady=16, padx=24, fill="both", expand=True)
+
         info_text = (
-            "A GUI tool for bulk downloading books from Archive.org.\n\n"
+            "A friendly desktop tool for bulk downloading books from Archive.org.\n\n"
             "Features:\n"
             "• Add items by URL or ID\n"
-            "• Bulk Queue Management\n"
-            "• Automated Account Loans\n"
-            "• Image Fetching\n"
-            "• Automatic PDF Conversion\n\n"
+            "• Queue with cover thumbnails\n"
+            "• Automated account loans\n"
+            "• Configurable resolution and output\n"
+            "• Automatic PDF conversion\n\n"
             "--- LEGAL DISCLAIMER ---\n"
             "This software is provided for educational and archiving purposes only. "
             "The authors assume no liability for misuse of this tool or violations of "
@@ -543,13 +563,9 @@ class App(ctk.CTk):
             "the right to download and store any content accessed through this tool.\n\n"
             "Please use responsibly."
         )
-        
-        # Use a label inside scroll frame for text wrapping
-        desc_label = ctk.CTkLabel(info_frame, text=info_text, justify="left", wraplength=320, text_color=("gray20", "gray80"))
-        desc_label.pack(fill="x", pady=5)
-        
-        # Wide Close Button
-        ctk.CTkButton(about_window, text="Close", command=about_window.destroy, width=200, height=35).pack(pady=20)
+        ctk.CTkLabel(info_frame, text=info_text, justify="left", wraplength=300, text_color=COLORS['text_secondary']).pack(fill="x", pady=8)
+
+        ctk.CTkButton(about_window, text="Close", command=about_window.destroy, width=200, height=36, fg_color=COLORS['bg_elevated'], hover_color=COLORS['border'], text_color=COLORS['text_primary'], border_color=COLORS['border'], border_width=1, corner_radius=8).pack(pady=(0, 20))
 
 if __name__ == "__main__":
     app = App()
