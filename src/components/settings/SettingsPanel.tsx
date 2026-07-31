@@ -17,7 +17,7 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
   };
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
+    <div className="mx-auto h-full max-w-2xl overflow-y-auto p-6">
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Settings</h2>
         <div className="flex items-center gap-3">

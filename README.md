@@ -1,79 +1,91 @@
-![made-with-python](https://img.shields.io/badge/Made%20with-Python3-brightgreen)
+# Folio
 
-<!-- LOGO -->
-<br />
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/54740007/108192715-e5958c80-7114-11eb-8240-e884895bb45f.png" alt="Logo" width="80" height="80">
+A fast, beautiful desktop app for downloading books from Archive.org — the Rust/Tauri rewrite of the original Python downloader.
 
-  <h3 align="center">Archive.org-Downloader</h3>
+![Folio](src-tauri/icons/icon.png)
 
-  <p align="center">
-    Python3 script to download archive.org books in PDF format
-    <br />
-    </p>
-</p>
+## Features
 
+- **Search** — browse the Archive.org catalog right inside the app, with paginated results and cover thumbnails
+- **Queue** — add books from search results, URLs, or the clipboard (`Ctrl+V`); downloads run automatically with up to 50 parallel connections
+- **Library** — every download is persisted in a local SQLite database with covers, metadata, and file paths
+- **PDF reader** — an in-app viewer that streams pages on demand (no waiting for the whole file), with keyboard navigation, click-to-flip, wheel scrolling, and zoom
+- **Fast downloads** — HTTP/1.1 with browser-grade headers, 3-retry logic, and 50-way parallel image fetching, matching the performance of the original Python implementation
+- **Small PDFs** — JPEGs are embedded with DCT passthrough instead of being re-encoded, so output files stay close to the source size
+- **Self-updating** — signed releases via `tauri-plugin-updater`: checks on launch, auto-downloads, installs, and relaunches
+- **Accessible by default** — readable typography, keyboard-selectable cards, focus rings, resizable panels, and a global debug console
 
-## About The Project
+## Tech stack
 
-There are many great books available on https://openlibrary.org/ and https://archive.org/, however, you can only borrow them for 1 hour to 14 days and you don't have the option to download it as a PDF to read it offline or share it with your friends. I created this program to solve this problem and retrieve the original book in pdf format for FREE!
+| Layer    | Choice                                                    |
+|----------|-----------------------------------------------------------|
+| Shell    | [Tauri 2](https://tauri.app) + React + TypeScript + Vite |
+| Styling  | Tailwind CSS v4, custom dark theme with lime accent       |
+| Backend  | Rust: reqwest, scraper, aes/ctr, printpdf, sqlx, tokio    |
+| Storage  | SQLite (library) + tauri-plugin-store (settings)          |
+| Viewer   | pdfjs-dist via Tauri's asset protocol (range requests)    |
+| Updates  | tauri-plugin-updater with minisign-signed artifacts       |
 
-Of course, the download takes a few minutes depending on the number of pages and the quality of the images you have selected. You must also create an account on https://archive.org/ for the script to work.
+## Getting started
 
+### Prerequisites
 
-## Getting Started
-To get started you need to have python3 installed. If it is not the case you can download it here : https://www.python.org/downloads/
+- Node.js 20+
+- Rust (stable) with the MSVC toolchain on Windows (`x86_64-pc-windows-msvc`)
+- [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform
 
-### Installation
-Make sure you've already git installed. Then you can run the following commands to get the scripts on your computer:
-   ```sh
-   git clone https://github.com/MiniGlome/Archive.org-Downloader.git
-   cd Archive.org-Downloader
+### Development
+
+```bash
+npm install
+npm run tauri dev
+```
+
+The app opens with the Library as the default page (configurable in Settings). Enter your Archive.org credentials and an output directory in Settings, and you're ready to download.
+
+### Building a release
+
+```bash
+npm run tauri build
+```
+
+Artifacts land in `src-tauri/target/release/bundle/`.
+
+## How downloads work
+
+1. **Loan** — the app logs in to Archive.org and borrows the book (public-domain books skip the loan token automatically).
+2. **Metadata** — book info and page image URLs are fetched from the book's data endpoint.
+3. **Images** — up to 50 pages download in parallel with per-page deobfuscation (AES-CTR, matching the book's `X-Obfuscate` header).
+4. **PDF assembly** — JPEGs are embedded losslessly (DCT passthrough) into a PDF; the temp image folder is cleaned up.
+
+## Project layout
+
+```
+src/                 React frontend (panels, components, hooks)
+src-tauri/
+  src/
+    commands/        Tauri command handlers (download, search, library, metadata)
+    downloader/      Rust download pipeline (archive, crypto, image, orchestrator, pdf)
+    library.rs       SQLite library persistence
+    tracing_logger.rs Backend log bridge for the debug console
+  capabilities/      Tauri permissions
+  tauri.conf.json    App config (window, updater, asset protocol)
+```
+
+## Publishing updates
+
+1. Bump the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+2. Build with the signing key set:
+   ```bash
+   TAURI_SIGNING_PRIVATE_KEY_PATH=/path/to/folio-updater.key npm run tauri build
    ```
-The script requires the modules `requests`, `tqdm` and `img2pdf`, you can install them all at once with this command:
-```sh
-pip install -r requirements.txt
-```
-   
-## Usage
-```sh
-usage: archive-org-downloader.py [-h] -e EMAIL -p PASSWORD [-u URL] [-d DIR] [-f FILE] [-r RESOLUTION] [-t THREADS] [-j]
+   The bundle output includes the installer plus the `latest.json` update manifest.
+3. Create a GitHub release and attach the installer and `latest.json`. The app's configured endpoint (GitHub releases) serves the update automatically.
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -e EMAIL, --email EMAIL
-                        Your archive.org email
-  -p PASSWORD, --password PASSWORD
-                        Your archive.org password
-  -u URL, --url URL     Link to the book (https://archive.org/details/XXXX). You can use this argument several times
-                        to download multiple books
-  -d DIR, --dir DIR     Output directory
-  -f FILE, --file FILE  File where are stored the URLs of the books to download
-  -r RESOLUTION, --resolution RESOLUTION
-                        Image resolution (10 to 0, 0 is the highest), [default 3]
-  -t THREADS, --threads THREADS
-                        Maximum number of threads, [default 50]
-  -j, --jpg             Output to individual JPG's rather than a PDF
-  -m, --meta            Output the metadata of the book to a json file
-```
-The `email` and `password` fields are required, so to use this script you must have a registered account on archive.org.
-The `-r` argument specifies the resolution of the images (0 is the best quality).
-The PDF are downloaded in the current folder
+> ⚠️ Keep the private signing key safe — without it, future updates can't be signed.
 
-### Example
-This command will download the 3 books as pdf in the best possible quality. To only download the individual images you can use `--jpg`.
-```sh
-python3 archive-org-downloader.py -e myemail@tempmail.com -p Passw0rd -r 0 -u https://archive.org/details/IntermediatePython -u https://archive.org/details/horrorgamispooky0000bidd_m7r1 -u https://archive.org/details/elblabladelosge00gaut 
-```
+## Credits
 
-If you want to download a lot of books, you can paste the urls of the books in a .txt file (one per line) and use `--file`
-```sh
-python3 archive-org-downloader.py -e myemail@tempmail.com -p Passw0rd --file books_to_download.txt
-```
+Designed and built by [tzero86](https://github.com/tzero86).
 
-## Donation
-If you want to support my work, you can send 2 or 3 Bitcoins 🙃 to this address: 
-```
-bc1q4nq8tjuezssy74d5amnrrq6ljvu7hd3l880m7l
-```
-![bitcoin_address](https://user-images.githubusercontent.com/54740007/169100171-1061c7a0-207e-459b-84de-2d6bb93b0f38.png)
+Folio is an unofficial desktop app. It is not affiliated with or endorsed by Archive.org. Please respect copyright and loan terms.

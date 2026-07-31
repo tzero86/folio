@@ -40,7 +40,7 @@ export function AboutDialog({ open, onClose, defaultTab = "about" }: AboutDialog
                 <button
                   onClick={() => setTab("about")}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    tab === "about" ? "bg-accent text-white" : "text-text-secondary hover:text-text-primary"
+                    tab === "about" ? "bg-accent text-accent-ink" : "text-text-secondary hover:text-text-primary"
                   }`}
                 >
                   About
@@ -48,7 +48,7 @@ export function AboutDialog({ open, onClose, defaultTab = "about" }: AboutDialog
                 <button
                   onClick={() => setTab("shortcuts")}
                   className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    tab === "shortcuts" ? "bg-accent text-white" : "text-text-secondary hover:text-text-primary"
+                    tab === "shortcuts" ? "bg-accent text-accent-ink" : "text-text-secondary hover:text-text-primary"
                   }`}
                 >
                   Shortcuts
@@ -72,6 +72,15 @@ export function AboutDialog({ open, onClose, defaultTab = "about" }: AboutDialog
                     <p className="text-text-secondary">
                       Folio is an unofficial desktop app. It is not affiliated with or endorsed by Archive.org.
                       Please respect copyright and loan terms.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-bg-elevated p-4 text-left text-sm">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wider text-text-muted">Credits</p>
+                    <p className="text-text-secondary">
+                      Designed and built by <span className="font-semibold text-text-primary">tzero86</span> — the
+                      Rust/Tauri rewrite of the original Python downloader, with a reader, search, library and
+                      self-updates.
                     </p>
                   </div>
 
