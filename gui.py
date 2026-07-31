@@ -12,6 +12,21 @@ import requests
 import archive_org_downloader
 from PIL import Image
 
+COLORS = {
+    'bg_primary': '#121318',
+    'bg_secondary': '#1a1c23',
+    'bg_elevated': '#22252d',
+    'text_primary': '#f3f1ec',
+    'text_secondary': '#a7a49d',
+    'text_muted': '#6e6b66',
+    'accent': '#e67a5f',
+    'accent_hover': '#f08d74',
+    'danger': '#e04f5f',
+    'danger_hover': '#f06b7a',
+    'success': '#5fae71',
+    'border': '#2c2f38',
+}
+
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
@@ -83,20 +98,79 @@ def save_credentials(username, password, output_dir=None):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f)
 
-class ItemRow(ctk.CTkFrame):
-    """A single row representing an item in the download list."""
-    def __init__(self, master, item_text, remove_callback, *args, **kwargs):
-        super().__init__(master, fg_color="transparent", *args, **kwargs)
-        self.pack(fill="x", pady=2)
-        
-        self.label = ctk.CTkLabel(self, text=item_text, anchor="w")
-        self.label.pack(side="left", padx=5, fill="x", expand=True)
-        
-        self.remove_btn = ctk.CTkButton(self, text="Remove", width=60, height=24, 
-                                        fg_color="#ef4444", hover_color="#dc2626", 
-                                        command=lambda: remove_callback(self, item_text))
-        self.remove_btn.pack(side="right", padx=5)
-        self.item_text = item_text
+class IconButton(ctk.CTkButton):
+    def __init__(self, master, symbol: str, command=None, size: int = 28, fg_color="transparent", hover_color=None, text_color=None, **kwargs):
+        super().__init__(
+            master,
+            text=symbol,
+            width=size,
+            height=size,
+            fg_color=fg_color,
+            hover_color=hover_color or COLORS['bg_elevated'],
+            text_color=text_color or COLORS['text_secondary'],
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=command,
+            **kwargs
+        )
+
+
+class StatusBadge(ctk.CTkLabel):
+    STATUS_COLORS = {
+        'queued': ('#3a322a', '#a7a49d'),
+        'downloading': ('#3d2e28', '#e67a5f'),
+        'done': ('#26382c', '#5fae71'),
+        'error': ('#3b2228', '#e04f5f'),
+    }
+
+    def __init__(self, master, status='queued'):
+        bg, fg = self.STATUS_COLORS.get(status, self.STATUS_COLORS['queued'])
+        super().__init__(master, text=status.upper(), fg_color=bg, text_color=fg, font=ctk.CTkFont(size=10, weight="bold"), corner_radius=4, padx=8, pady=2)
+        self._status = status
+
+    def set_status(self, status: str):
+        self._status = status
+        bg, fg = self.STATUS_COLORS.get(status, self.STATUS_COLORS['queued'])
+        self.configure(text=status.upper(), fg_color=bg, text_color=fg)
+
+
+class ItemCard(ctk.CTkFrame):
+    def __init__(self, master, url: str, remove_callback, **kwargs):
+        super().__init__(master, fg_color=COLORS['bg_secondary'], corner_radius=8, border_width=1, border_color=COLORS['border'], **kwargs)
+        self.pack(fill="x", pady=4, padx=4)
+        self.url = url
+        self.book_id = book_id_from_url(url)
+
+        # Thumbnail
+        self.thumb_label = ctk.CTkLabel(self, text="", image=make_placeholder(), width=64, height=80, fg_color=COLORS['bg_elevated'], corner_radius=6)
+        self.thumb_label.pack(side="left", padx=(10, 12), pady=10)
+
+        # Info
+        info_frame = ctk.CTkFrame(self, fg_color="transparent")
+        info_frame.pack(side="left", fill="both", expand=True, pady=10)
+
+        self.title_label = ctk.CTkLabel(info_frame, text=self.book_id, anchor="w", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS['text_primary'])
+        self.title_label.pack(fill="x")
+
+        self.url_label = ctk.CTkLabel(info_frame, text=url, anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS['text_muted'])
+        self.url_label.pack(fill="x")
+
+        self.status_badge = StatusBadge(info_frame)
+        self.status_badge.pack(anchor="w", pady=(6, 0))
+
+        # Remove button
+        self.remove_btn = IconButton(self, "×", command=lambda: remove_callback(self), size=32, hover_color=COLORS['danger_hover'], text_color=COLORS['text_secondary'])
+        self.remove_btn.pack(side="right", padx=10, pady=10)
+
+        # Load thumbnail asynchronously
+        self.after(50, self._load_thumbnail)
+
+    def _load_thumbnail(self):
+        thumb = fetch_thumbnail(self.book_id)
+        if thumb:
+            self.thumb_label.configure(image=thumb)
+
+    def set_status(self, status: str):
+        self.status_badge.set_status(status)
 
 class StdoutRedirector:
     def __init__(self, queue):
@@ -122,7 +196,7 @@ class App(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=10) # Items List
 
-        self.items_list = [] # Store ItemRow objects
+        self.items_list = [] # Store ItemCard objects
         
         # --- 0. Header ---
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -280,12 +354,12 @@ class App(ctk.CTk):
 
         self.item_entry.configure(border_color=["#979DA2", "#565B5E"])
 
-        row = ItemRow(self.list_scroll, text, self.remove_item)
+        row = ItemCard(self.list_scroll, text, self.remove_item)
         self.items_list.append(row)
         self.item_entry.delete(0, "end")
         self.update_list_header()
 
-    def remove_item(self, row_widget, item_text):
+    def remove_item(self, row_widget):
         row_widget.destroy()
         if row_widget in self.items_list:
             self.items_list.remove(row_widget)
@@ -328,7 +402,7 @@ class App(ctk.CTk):
     def start_download(self):
         username = self.user_entry.get()
         password = self.pass_entry.get()
-        items = [row.item_text for row in self.items_list]
+        items = [row.url for row in self.items_list]
 
         if not items:
             self.print_output("Error: Please add at least one item queue.\n")
