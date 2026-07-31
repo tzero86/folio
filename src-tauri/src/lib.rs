@@ -7,7 +7,6 @@ use commands::download::download_books;
 use commands::library::{add_library_book, list_library_books, find_library_book, delete_library_book};
 use commands::metadata::fetch_book_metadata;
 use commands::search::search_archive;
-use commands::update::check_update;
 use sqlx::sqlite::SqlitePool;
 use tauri::Manager;
 
@@ -29,6 +28,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
             let rt = tauri::async_runtime::handle();
@@ -49,7 +50,6 @@ pub fn run() {
             fetch_book_metadata,
             search_archive,
             download_books,
-            check_update,
             get_logs,
             add_library_book,
             list_library_books,

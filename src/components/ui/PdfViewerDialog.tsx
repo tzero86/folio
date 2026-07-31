@@ -120,6 +120,37 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     [numPages]
   );
 
+  // Wheel-to-flip: native scrolling within a tall page; flipping only once the
+  // user reaches the bottom/top of the scroll area (reader-app convention).
+  useEffect(() => {
+    if (!open) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+      const atTop = el.scrollTop <= 2;
+      if (e.deltaY > 0 && atBottom) {
+        e.preventDefault();
+        goPage(1);
+      } else if (e.deltaY < 0 && atTop) {
+        e.preventDefault();
+        goPage(-1);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [open, goPage]);
+
+  // Click halves of the page to flip (PDF-reader convention).
+  const handleCanvasClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (e.clientX - rect.left > rect.width / 2) goPage(1);
+      else goPage(-1);
+    },
+    [goPage]
+  );
+
   // Reader keyboard shortcuts
   useEffect(() => {
     if (!open) return;
@@ -200,7 +231,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
             <p className="text-sm text-danger">{error}</p>
           </div>
         ) : (
-          <canvas ref={canvasRef} className="rounded-sm bg-white shadow-2xl" />
+          <canvas ref={canvasRef} onClick={handleCanvasClick} className="rounded-sm bg-white shadow-2xl" title="Click left/right half to turn pages" />
         )}
       </div>
     </Dialog>

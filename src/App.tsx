@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Library, List, Settings, Info, Search, ChevronsRight, ChevronsLeft } from "lucide-react";
 import { motion } from "framer-motion";
-import { invoke } from "@tauri-apps/api/core";
-import { openPath, openUrl } from "@tauri-apps/plugin-opener";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { load as loadStore, Store } from "@tauri-apps/plugin-store";
 import { Button } from "./components/ui/Button";
 import { QueuePanel } from "./components/queue/QueuePanel";
@@ -56,7 +57,7 @@ export default function App() {
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [updateUrl, setUpdateUrl] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; status: "downloading" | "ready" | "error"; progress: number } | null>(null);
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -227,11 +228,40 @@ export default function App() {
     };
   }, [handleStatus]);
 
+  // Self-update: check on launch, auto-download and install, then relaunch.
   useEffect(() => {
-    invoke<string | null>("check_update").then((url) => {
-      if (url) setUpdateUrl(url);
-    }).catch(() => null);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        const update = await check();
+        if (!update || cancelled) return;
+        addLog("info", `Update available: v${update.version}`);
+        setUpdateInfo({ version: update.version, status: "downloading", progress: 0 });
+        let transferred = 0;
+        let total = 0;
+        await update.downloadAndInstall((e) => {
+          if (e.event === "Started") total = e.data.contentLength ?? 0;
+          if (e.event === "Progress") {
+            transferred += e.data.chunkLength;
+            setUpdateInfo((prev) =>
+              prev ? { ...prev, progress: total > 0 ? Math.round((transferred / total) * 100) : 0 } : prev
+            );
+          }
+        });
+        if (cancelled) return;
+        setUpdateInfo({ version: update.version, status: "ready", progress: 100 });
+        addToast("success", "Update installed", `v${update.version} — restarting…`);
+        setTimeout(() => {
+          relaunch().catch((e) => addLog("error", "Relaunch failed", String(e)));
+        }, 1500);
+      } catch (e) {
+        if (!cancelled) addLog("debug", "Update check failed", String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [addLog, addToast]);
 
   // Poll Rust tracing logs every 2 seconds
   useEffect(() => {
@@ -359,7 +389,7 @@ export default function App() {
         <div className={cn("flex items-center border-b border-border p-3", sidebarCollapsed ? "justify-center" : "justify-between")}>
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold">F</div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-ink font-bold">F</div>
               <div>
                 <h1 className="text-sm font-bold tracking-tight text-text-primary">Folio</h1>
                 <p className="text-xs text-text-muted">Archive.org Downloader</p>
@@ -367,7 +397,7 @@ export default function App() {
             </div>
           )}
           {sidebarCollapsed && (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold">F</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-ink font-bold">F</div>
           )}
           <button
             onClick={toggleSidebar}
@@ -401,17 +431,20 @@ export default function App() {
         </nav>
 
         <div className="border-t border-border p-3">
-          {updateUrl && !sidebarCollapsed && (
+          {updateInfo && !sidebarCollapsed && (
             <div className="mb-3 rounded-lg border border-accent/30 bg-accent-subtle p-2.5">
-              <p className="text-xs font-medium text-accent">Update available</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-1 h-auto px-0 py-0 text-xs text-accent hover:bg-transparent"
-                onClick={async () => { try { await openUrl(updateUrl); } catch (e) { addToast("error", "Failed to open update URL", String(e)); } }}
-              >
-                Download now
-              </Button>
+              <p className="text-xs font-medium text-accent">
+                {updateInfo.status === "ready"
+                  ? "Update installed — restarting…"
+                  : updateInfo.status === "error"
+                    ? "Update failed"
+                    : `Updating to v${updateInfo.version}…`}
+              </p>
+              {updateInfo.status === "downloading" && (
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-bg-elevated">
+                  <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${updateInfo.progress}%` }} />
+                </div>
+              )}
             </div>
           )}
           <Button

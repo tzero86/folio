@@ -18,6 +18,8 @@
     "opener:allow-open-url",
     "dialog:default",
     "shell:default",
-    "store:default"
+    "store:default",
+    "updater:default",
+    "process:default"
   ]
 }

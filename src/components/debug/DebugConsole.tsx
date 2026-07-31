@@ -60,29 +60,30 @@ export function DebugConsole({ logs, onClear }: DebugConsoleProps) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!expanded) return;
-    if (!dragState.current) return;
-    const onMove = (e: MouseEvent) => {
-      const s = dragState.current;
-      if (!s) return;
-      const next = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, s.startHeight - (e.clientY - s.startY)));
-      setHeightPersisted(next);
-    };
-    const onUp = () => {
-      dragState.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [expanded, setHeightPersisted]);
+  const startResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      dragState.current = { startY: e.clientY, startHeight: height };
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      const onMove = (ev: MouseEvent) => {
+        const s = dragState.current;
+        if (!s) return;
+        const next = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, s.startHeight - (ev.clientY - s.startY)));
+        setHeightPersisted(next);
+      };
+      const onUp = () => {
+        dragState.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [height, setHeightPersisted]
+  );
 
   useEffect(() => {
     if (expanded) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -108,11 +109,7 @@ export function DebugConsole({ logs, onClear }: DebugConsoleProps) {
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize debug console"
-          onMouseDown={(e) => {
-            dragState.current = { startY: e.clientY, startHeight: height };
-            document.body.style.cursor = "row-resize";
-            document.body.style.userSelect = "none";
-          }}
+          onMouseDown={startResize}
           className="absolute inset-x-0 -top-1 z-10 flex h-2 cursor-row-resize items-center justify-center text-text-muted hover:text-accent"
         >
           <GripHorizontal size={12} />

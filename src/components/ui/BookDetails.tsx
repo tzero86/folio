@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { X, ImageOff, ChevronsRight, ChevronsLeft } from "lucide-react";
 
 export interface BookDetailField {
@@ -55,28 +55,30 @@ export function BookDetails({ coverUrl, title, fields, description, actions, onC
 
   const visibleFields = fields.filter((f) => f.value !== null && f.value !== undefined && f.value !== "");
 
-  useEffect(() => {
-    if (!dragState.current) return;
-    const onMove = (e: MouseEvent) => {
-      const s = dragState.current;
-      if (!s) return;
-      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, s.startWidth - (e.clientX - s.startX)));
-      setWidth(next);
-    };
-    const onUp = () => {
-      dragState.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-    return () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-  }, [setWidth]);
+  const startResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      dragState.current = { startX: e.clientX, startWidth: width };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      const onMove = (ev: MouseEvent) => {
+        const s = dragState.current;
+        if (!s) return;
+        const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, s.startWidth - (ev.clientX - s.startX)));
+        setWidth(next);
+      };
+      const onUp = () => {
+        dragState.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [setWidth, width]
+  );
 
   if (collapsed) {
     return (
@@ -98,11 +100,7 @@ export function BookDetails({ coverUrl, title, fields, description, actions, onC
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize details panel"
-        onMouseDown={(e) => {
-          dragState.current = { startX: e.clientX, startWidth: width };
-          document.body.style.cursor = "col-resize";
-          document.body.style.userSelect = "none";
-        }}
+        onMouseDown={startResize}
         className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent/60"
       />
 
