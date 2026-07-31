@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #121318;
+  --color-bg-secondary: #1a1c23;
+  --color-bg-elevated: #22252d;
+  --color-bg-overlay: rgba(0, 0, 0, 0.6);
+  --color-text-primary: #f3f1ec;
+  --color-text-secondary: #a7a49d;
+  --color-text-muted: #6e6b66;
+  --color-accent: #e67a5f;
+  --color-accent-hover: #f08d74;
+  --color-accent-subtle: rgba(230, 122, 95, 0.12);
+  --color-danger: #e04f5f;
+  --color-success: #5fae71;
+  --color-warning: #e6a15f;
+  --color-border: #2c2f38;
+  --color-border-subtle: #1e2027;
+}
+
+@layer base {
+  html, body, #root {
+    @apply h-full w-full overflow-hidden bg-bg-primary text-text-primary antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .kbd {
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-bg-elevated px-1.5 py-0.5 text-xs font-medium text-text-secondary shadow-sm;
+    min-width: 1.5rem;
+  }
+}
