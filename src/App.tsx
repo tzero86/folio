@@ -11,6 +11,7 @@ import { QueuePanel } from "./components/queue/QueuePanel";
 import { LibraryPanel } from "./components/library/LibraryPanel";
 import { SearchPanel } from "./components/search/SearchPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
+import { SetupDialog } from "./components/settings/SetupDialog";
 import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
@@ -57,6 +58,7 @@ export default function App() {
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{ version: string; status: "downloading" | "ready" | "error"; progress: number } | null>(null);
 
   const itemsRef = useRef(items);
@@ -291,6 +293,9 @@ export default function App() {
           if (saved.defaultTab) setActiveTab(saved.defaultTab);
         } else {
           addLog("info", "No saved settings found");
+          // First run: prompt for setup unless the user explicitly skipped it before.
+          const setup = await store.get<{ dismissed?: boolean }>("setup");
+          if (!setup?.dismissed) setSetupOpen(true);
         }
       } catch (e) {
         addLog("error", "Failed to load settings", String(e));
@@ -299,16 +304,17 @@ export default function App() {
     init();
   }, []);
 
-  const saveSettings = useCallback(async () => {
+  const saveSettings = useCallback(async (next?: AppSettings) => {
     const store = storeRef.current;
     if (!store) {
       addLog("error", "Cannot save settings: store not loaded");
       return;
     }
+    const toSave = next ?? settings;
     setSaveStatus("saving");
     addLog("info", "Saving settings");
     try {
-      await store.set("settings", settings);
+      await store.set("settings", toSave);
       await store.save();
       setSaveStatus("saved");
       addLog("info", "Settings saved");
@@ -319,15 +325,35 @@ export default function App() {
       addToast("error", "Failed to save settings", String(e));
       setSaveStatus("idle");
     }
-  }, [settings, addLog]);
+  }, [settings, addLog, addToast]);
 
-  const browseOutputDir = useCallback(async () => {
+  const completeSetup = useCallback(
+    async (next: AppSettings) => {
+      setSettings(next);
+      await saveSettings(next);
+      setSetupOpen(false);
+    },
+    [saveSettings]
+  );
+
+  const skipSetup = useCallback(async () => {
+    try {
+      await storeRef.current?.set("setup", { dismissed: true });
+      await storeRef.current?.save();
+    } catch {
+      /* non-fatal */
+    }
+    setSetupOpen(false);
+  }, []);
+
+  const browseOutputDir = useCallback(async (): Promise<string | null> => {
     addLog("info", "Opening output directory picker");
     const dir = await openDialog({ directory: true });
     if (dir) {
       addLog("info", `Selected output directory: ${dir}`);
       setSettings((prev) => ({ ...prev, outputDir: dir }));
     }
+    return dir ?? null;
   }, [addLog]);
 
   useShortcuts({
@@ -386,7 +412,7 @@ export default function App() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <div className="flex min-h-0 w-full flex-1">
         <aside className={cn("flex shrink-0 flex-col border-r border-border bg-bg-secondary transition-[width] duration-150", sidebarCollapsed ? "w-14" : "w-64")}>
-        <div className={cn("flex items-center border-b border-border p-3", sidebarCollapsed ? "justify-center" : "justify-between")}>
+        <div className={cn("flex items-center border-b border-border", sidebarCollapsed ? "justify-center p-2" : "justify-between p-3")}>
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-ink font-bold">F</div>
@@ -397,16 +423,18 @@ export default function App() {
             </div>
           )}
           {sidebarCollapsed && (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-ink font-bold">F</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm text-accent-ink font-bold" title="Folio">F</div>
           )}
-          <button
-            onClick={toggleSidebar}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary"
-          >
-            {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-          </button>
+          {!sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary"
+            >
+              <ChevronsLeft size={16} />
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
@@ -431,6 +459,16 @@ export default function App() {
         </nav>
 
         <div className="border-t border-border p-3">
+          {sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              className="mb-2 flex w-full items-center justify-center rounded-md p-2 text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary"
+            >
+              <ChevronsRight size={16} />
+            </button>
+          )}
           {updateInfo && !sidebarCollapsed && (
             <div className="mb-3 rounded-lg border border-accent/30 bg-accent-subtle p-2.5">
               <p className="text-xs font-medium text-accent">
@@ -496,6 +534,13 @@ export default function App() {
         open={aboutOpen}
         onClose={() => setAboutOpen(false)}
         defaultTab={shortcutsOpen ? "shortcuts" : "about"}
+      />
+      <SetupDialog
+        open={setupOpen}
+        initial={settings}
+        onBrowse={browseOutputDir}
+        onComplete={completeSetup}
+        onSkip={skipSetup}
       />
     </div>
     <DebugConsole logs={logs} onClear={clearLogs} />
