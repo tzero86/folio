@@ -41,6 +41,14 @@ def get_book_infos(session, url):
 	else:
 		raise Exception("Error while getting image links")
 
+def book_id_from_url(url: str) -> str:
+	"""Extract the Archive.org identifier from a /details/ URL."""
+	url = url.rstrip('/')
+	parts = url.split('/')
+	if len(parts) >= 5 and parts[2] == 'archive.org' and parts[3] == 'details':
+		return parts[4]
+	raise ValueError(f"Cannot extract book id from URL: {url}")
+
 def login(email, password):
 	session = requests.Session()
 	response = session.get("https://archive.org/services/account/login/")
@@ -254,7 +262,7 @@ def make_pdf(pdf, title, directory):
 	print(f"[+] PDF saved as \"{file}\"")
 
 
-def process_downloads(email, password, urls, output_dir, resolution=3, threads=50, jpg_output=False, meta_output=False):
+def process_downloads(email, password, urls, output_dir, resolution=3, threads=50, jpg_output=False, meta_output=False, status_callback=None):
     """Main logic to process the list of URLs."""
     if not output_dir:
         output_dir = os.getcwd()
@@ -278,8 +286,11 @@ def process_downloads(email, password, urls, output_dir, resolution=3, threads=5
         book_id = None
         try:
             # Normalize URL to the canonical /details/<id> path
-            book_id = url.split("/")[4]
+            book_id = book_id_from_url(url)
             canonical_url = f"https://archive.org/details/{book_id}"
+
+            if status_callback:
+                status_callback(book_id, 'started')
 
             print("="*40)
             session = loan(session, book_id)
@@ -340,9 +351,14 @@ def process_downloads(email, password, urls, output_dir, resolution=3, threads=5
                 else:
                     print("No images downloaded, skipping PDF creation.")
 
+            if status_callback:
+                status_callback(book_id, 'done')
+
             return_loan(session, book_id)
         except Exception as e:
             print(f"Error processing {url}: {e}")
+            if status_callback and book_id:
+                status_callback(book_id, 'error', str(e))
             if book_id is not None:
                 try:
                     return_loan(session, book_id)
