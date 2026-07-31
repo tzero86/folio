@@ -18,23 +18,35 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
     ? `https://archive.org/download/${meta.identifier}/__ia_thumb.jpg`
     : null;
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={isSelected}
       onClick={onSelect}
+      onKeyDown={handleKeyDown}
       className={cn(
-        "group flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer",
+        "group flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         isSelected
           ? "border-accent bg-accent-subtle"
           : "border-border bg-bg-secondary hover:bg-bg-elevated"
       )}
     >
-      <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-md bg-bg-elevated">
+      <div className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md bg-bg-elevated">
         {coverUrl ? (
           <img
             src={coverUrl}
             alt={meta?.title ?? "Book cover"}
             className="h-full w-full object-contain bg-bg-elevated"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-text-muted">
@@ -55,7 +67,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
           {meta?.creator?.join("; ") || "Unknown author"}
         </p>
 
-        <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
+        <div className="mt-1 flex items-center gap-3 text-xs text-text-muted">
           {meta?.date && <span>{meta.date}</span>}
           {meta?.image_count != null && (
             <span className="flex items-center gap-1">
@@ -67,7 +79,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
 
         {(item.status === "downloading" || item.status === "started") && (
           <div className="mt-3">
-            <div className="mb-1 flex justify-between text-[10px] text-text-muted">
+            <div className="mb-1 flex justify-between text-xs text-text-muted">
               <span>{item.status === "started" ? "Starting..." : item.progress >= 100 ? "Assembling PDF..." : "Downloading..."}</span>
               <span>{item.progress}%</span>
             </div>
@@ -85,11 +97,29 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
         )}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onDownload(); }} title="Download now">
+      <div className="flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload();
+          }}
+          title="Download now"
+          aria-label={`Download ${meta?.title ?? item.urlOrId}`}
+        >
           <Play size={14} />
         </Button>
-        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          title="Remove"
+          aria-label={`Remove ${meta?.title ?? item.urlOrId}`}
+        >
           <Trash2 size={14} />
         </Button>
       </div>

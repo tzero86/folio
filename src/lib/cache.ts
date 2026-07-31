@@ -1,3 +1,5 @@
+import type { BookMetadata, SearchResponse } from "../types";
+
 export interface TtlCache<T> {
   get(key: string): T | undefined;
   set(key: string, value: T): void;
@@ -29,3 +31,9 @@ export function createTtlCache<T>(ttlMs: number, maxEntries = 200): TtlCache<T> 
     },
   };
 }
+
+/** Book metadata is immutable per identifier; shared by queue, search and details panels. */
+export const metadataCache = createTtlCache<BookMetadata>(30 * 60 * 1000);
+
+/** Same query+page is served from memory instead of the network. */
+export const searchCache = createTtlCache<SearchResponse>(10 * 60 * 1000);
