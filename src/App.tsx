@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Library, List, Settings, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-shell";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { load as loadStore, Store } from "@tauri-apps/plugin-store";
 import { Button } from "./components/ui/Button";
@@ -294,7 +294,7 @@ export default function App() {
   const openOutput = useCallback(async () => {
     if (settings.outputDir) {
       try {
-        await open(settings.outputDir);
+        await openPath(settings.outputDir);
       } catch (e) {
         addToast("error", "Failed to open output directory", String(e));
       }
@@ -342,7 +342,7 @@ export default function App() {
                 variant="ghost"
                 size="sm"
                 className="mt-1 h-auto px-0 py-0 text-xs text-accent hover:bg-transparent"
-                onClick={async () => { try { await open(updateUrl); } catch (e) { addToast("error", "Failed to open update URL", String(e)); } }}
+                onClick={async () => { try { await openUrl(updateUrl); } catch (e) { addToast("error", "Failed to open update URL", String(e)); } }}
               >
                 Download now
               </Button>

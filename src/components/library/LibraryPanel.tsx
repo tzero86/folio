@@ -2,14 +2,9 @@ import { useState, useEffect } from "react";
 import { BookOpen, FileText, Trash2, FolderOpen } from "lucide-react";
 import { Button } from "../ui/Button";
 import { listLibraryBooks, deleteLibraryBook } from "../../lib/tauri";
-import { open } from "@tauri-apps/plugin-shell";
+import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { LibraryBook } from "../../lib/tauri";
 import type { ToastType } from "../ui/Toast";
-
-function getParentDir(path: string): string {
-  const lastSep = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
-  return lastSep > 0 ? path.slice(0, lastSep) : path;
-}
 
 interface LibraryPanelProps {
   addToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
@@ -32,9 +27,11 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
 
   useEffect(() => { load(); }, []);
 
+  const isPdf = (path: string): boolean => path.toLowerCase().endsWith(".pdf");
+
   const handleOpen = async (book: LibraryBook) => {
     try {
-      await open(book.pdf_path);
+      await openPath(book.pdf_path);
     } catch (e) {
       addToast("error", "Failed to open", String(e));
     }
@@ -42,8 +39,11 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
 
   const handleOpenLocation = async (book: LibraryBook) => {
     try {
-      const dir = getParentDir(book.pdf_path);
-      await open(dir);
+      if (isPdf(book.pdf_path)) {
+        await revealItemInDir(book.pdf_path);
+      } else {
+        await openPath(book.pdf_path);
+      }
     } catch (e) {
       addToast("error", "Failed to open location", String(e));
     }
