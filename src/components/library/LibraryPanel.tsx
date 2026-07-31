@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BookOpen, FileText, Trash2, FolderOpen, Eye } from "lucide-react";
+import { BookOpen, FileText, Trash2, FolderOpen, Eye, Plus, Search } from "lucide-react";
 import { Button } from "../ui/Button";
 import { BookDetails } from "../ui/BookDetails";
 import { PdfViewerDialog } from "../ui/PdfViewerDialog";
@@ -11,9 +11,10 @@ import type { ToastType } from "../ui/Toast";
 
 interface LibraryPanelProps {
   addToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
+  onGoToSearch: () => void;
 }
 
-export function LibraryPanel({ addToast }: LibraryPanelProps) {
+export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
@@ -114,6 +115,13 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
         </div>
         <p className="text-sm font-medium">Your library is empty</p>
         <p className="mt-1 max-w-xs text-xs">Downloaded books will appear here.</p>
+        <button
+          onClick={onGoToSearch}
+          className="mt-6 flex items-center gap-2 rounded-xl border-2 border-dashed border-border bg-bg-secondary px-6 py-4 text-sm font-medium text-text-secondary transition-colors hover:border-accent/60 hover:bg-accent-subtle hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Plus size={16} />
+          Search / add a new book
+        </button>
       </div>
     );
   }
@@ -164,6 +172,14 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
                 </div>
               </button>
             ))}
+            <button
+              onClick={onGoToSearch}
+              className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-transparent p-3 text-text-muted transition-colors hover:border-accent/60 hover:bg-accent-subtle hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Search size={20} />
+              <span className="text-sm font-medium">Search / add a new book</span>
+              <span className="text-xs">Browse Archive.org</span>
+            </button>
           </div>
         </div>
       </div>

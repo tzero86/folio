@@ -38,7 +38,7 @@ function parseBookId(input: string): string {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("queue");
+  const [activeTab, setActiveTab] = useState<Tab>("library");
   const [items, setItems] = useState<QueueItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -452,7 +452,9 @@ export default function App() {
           {activeTab === "search" && (
             <SearchPanel onAdd={addItem} addToast={addToast} />
           )}
-          {activeTab === "library" && <LibraryPanel addToast={addToast} />}
+          {activeTab === "library" && (
+            <LibraryPanel addToast={addToast} onGoToSearch={() => setActiveTab("search")} />
+          )}
           {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onBrowse={browseOutputDir} onSave={saveSettings} saveStatus={saveStatus} />}
         </motion.div>
       </main>
