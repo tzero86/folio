@@ -46,18 +46,24 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
                 resolution,
                 create_pdf,
                 |status, detail| {
-                    let payload = if let Some(d) = detail {
-                        serde_json::json!({
-                            "id": id_clone,
-                            "status": status,
-                            if status == "done" { "pdf" } else { "message" }: d
-                        })
-                    } else {
-                        serde_json::json!({
-                            "id": id_clone,
-                            "status": status,
-                        })
-                    };
+                    let mut payload = serde_json::json!({
+                        "id": id_clone,
+                        "status": status,
+                    });
+                    if let Some(d) = detail {
+                        if status == "done" {
+                            payload["pdf"] = d.into();
+                        } else if status == "downloading" {
+                            if let Some((current, rest)) = d.split_once(":") {
+                                payload["current"] = current.into();
+                                payload["total"] = rest.into();
+                            } else {
+                                payload["message"] = d.into();
+                            }
+                        } else {
+                            payload["message"] = d.into();
+                        }
+                    }
                     app.emit("download-status", payload).ok();
                 },
             )

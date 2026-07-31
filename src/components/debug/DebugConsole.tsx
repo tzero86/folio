@@ -49,9 +49,17 @@ export function DebugConsole({ logs, onClear }: DebugConsoleProps) {
   };
 
   return (
-    <div className={cn("fixed bottom-0 left-64 right-0 z-40 flex flex-col border-t border-border bg-bg-secondary transition-all", expanded ? "h-80" : "h-10")}>
+    <div
+      className={cn(
+        "flex w-full shrink-0 flex-col border-t border-border bg-bg-secondary transition-all",
+        expanded ? "h-72" : "h-10"
+      )}
+    >
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-        <button onClick={() => setExpanded((v) => !v)} className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary"
+        >
           {expanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           <Terminal size={14} />
           Debug Console

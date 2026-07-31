@@ -32,7 +32,8 @@ where
             .with_context(|| format!("downloading page {}", i + 1))?;
         image_paths.push(path);
         let progress = ((i + 1) as f64 / links.len() as f64 * 100.0) as u32;
-        emit_status("downloading", Some(&progress.to_string()));
+        let detail = format!("{}/{}:{}", i + 1, links.len(), progress);
+        emit_status("downloading", Some(&detail));
     }
 
     let final_path = if create_pdf {
