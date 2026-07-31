@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Loader2, X, Maximize } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
-import { readPdfBytes } from "../../lib/tauri";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -15,7 +15,10 @@ interface PdfViewerDialogProps {
   onClose: () => void;
 }
 
+const ZOOM_STEP = 0.25;
+
 export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const docRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const loadingTaskRef = useRef<pdfjsLib.PDFDocumentLoadingTask | null>(null);
@@ -25,7 +28,10 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
 
+  // Load the document from the asset protocol URL - pdf.js issues range
+  // requests, so only the requested pages are transferred, not the whole file.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -35,10 +41,9 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
       setError(null);
       setPageNum(1);
       setNumPages(0);
-      setZoom(1);
       try {
-        const bytes = await readPdfBytes(path);
-        const task = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+        const url = convertFileSrc(path);
+        const task = pdfjsLib.getDocument({ url });
         loadingTaskRef.current = task;
         const doc = await task.promise;
         if (cancelled) {
@@ -47,6 +52,13 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         }
         docRef.current = doc;
         setNumPages(doc.numPages);
+        // fit first page to container width
+        const page = await doc.getPage(1);
+        const containerWidth = containerRef.current?.clientWidth ?? 800;
+        const vp = page.getViewport({ scale: 1 });
+        const scale = Math.max(0.25, (containerWidth - 48) / vp.width);
+        setFitScale(scale);
+        setZoom(scale);
       } catch (e) {
         if (!cancelled) setError(String(e));
       } finally {
@@ -63,6 +75,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     };
   }, [open, path]);
 
+  // Render the current page
   useEffect(() => {
     if (!open || !docRef.current || pageNum < 1 || pageNum > numPages) return;
     let cancelled = false;
@@ -100,23 +113,64 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     };
   }, [open, pageNum, zoom, numPages]);
 
-  const goPage = (delta: number) => {
-    setPageNum((p) => Math.min(numPages, Math.max(1, p + delta)));
-  };
+  const goPage = useCallback(
+    (delta: number) => {
+      setPageNum((p) => Math.min(numPages, Math.max(1, p + delta)));
+    },
+    [numPages]
+  );
+
+  // Reader keyboard shortcuts
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest("button, input, select")) return;
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowDown":
+        case "PageDown":
+        case " ":
+          e.preventDefault();
+          goPage(1);
+          break;
+        case "ArrowLeft":
+        case "ArrowUp":
+        case "PageUp":
+          e.preventDefault();
+          goPage(-1);
+          break;
+        case "+":
+        case "=":
+          setZoom((z) => Math.min(3, z + ZOOM_STEP));
+          break;
+        case "-":
+          setZoom((z) => Math.max(0.25, z - ZOOM_STEP));
+          break;
+        case "Escape":
+          onClose();
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, goPage, onClose]);
 
   return (
-    <Dialog open={open} onClose={onClose} className="flex h-[85vh] w-[85vw] max-w-6xl flex-col p-0">
+    <Dialog open={open} onClose={onClose} className="flex h-[88vh] w-[88vw] max-w-7xl flex-col p-0">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary" title={title}>
           {title}
         </h2>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))} title="Zoom out" aria-label="Zoom out">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(0.25, z - ZOOM_STEP))} title="Zoom out (-)" aria-label="Zoom out">
             <ZoomOut size={16} />
           </Button>
-          <span className="w-12 text-center text-xs text-text-muted">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(3, z + 0.25))} title="Zoom in" aria-label="Zoom in">
+          <span className="w-14 text-center text-xs text-text-muted">{Math.round(zoom * 100)}%</span>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(3, z + ZOOM_STEP))} title="Zoom in (+)" aria-label="Zoom in">
             <ZoomIn size={16} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom(fitScale)} title="Fit to width" aria-label="Fit to width">
+            <Maximize size={16} />
           </Button>
           <div className="mx-2 h-5 w-px bg-border" />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => goPage(-1)} disabled={pageNum <= 1} title="Previous page" aria-label="Previous page">
@@ -129,20 +183,22 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
             <ChevronRight size={16} />
           </Button>
           <div className="mx-2 h-5 w-px bg-border" />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} title="Close" aria-label="Close viewer">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose} title="Close (Esc)" aria-label="Close viewer">
             <X size={16} />
           </Button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg-overlay p-6">
+      <div ref={containerRef} className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg-overlay p-6">
         {loading ? (
           <div className="flex items-center gap-2 py-20 text-text-muted">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-sm">Loading PDF…</span>
           </div>
         ) : error ? (
-          <p className="py-20 text-sm text-danger">{error}</p>
+          <div className="py-20 text-center">
+            <p className="text-sm text-danger">{error}</p>
+          </div>
         ) : (
           <canvas ref={canvasRef} className="rounded-sm bg-white shadow-2xl" />
         )}
