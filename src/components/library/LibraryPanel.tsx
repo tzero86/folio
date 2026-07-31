@@ -4,8 +4,18 @@ import { Button } from "../ui/Button";
 import { listLibraryBooks, deleteLibraryBook } from "../../lib/tauri";
 import { open } from "@tauri-apps/plugin-shell";
 import type { LibraryBook } from "../../lib/tauri";
+import type { ToastType } from "../ui/Toast";
 
-export function LibraryPanel() {
+function getParentDir(path: string): string {
+  const lastSep = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
+  return lastSep > 0 ? path.slice(0, lastSep) : path;
+}
+
+interface LibraryPanelProps {
+  addToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
+}
+
+export function LibraryPanel({ addToast }: LibraryPanelProps) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,9 +32,31 @@ export function LibraryPanel() {
 
   useEffect(() => { load(); }, []);
 
-  const handleDelete = async (identifier: string) => {
-    await deleteLibraryBook(identifier);
-    setBooks((prev) => prev.filter((b) => b.identifier !== identifier));
+  const handleOpen = async (book: LibraryBook) => {
+    try {
+      await open(book.pdf_path);
+    } catch (e) {
+      addToast("error", "Failed to open", String(e));
+    }
+  };
+
+  const handleOpenLocation = async (book: LibraryBook) => {
+    try {
+      const dir = getParentDir(book.pdf_path);
+      await open(dir);
+    } catch (e) {
+      addToast("error", "Failed to open location", String(e));
+    }
+  };
+
+  const handleDelete = async (book: LibraryBook) => {
+    try {
+      await deleteLibraryBook(book.identifier);
+      setBooks((prev) => prev.filter((b) => b.identifier !== book.identifier));
+      addToast("info", "Removed from library", book.title);
+    } catch (e) {
+      addToast("error", "Failed to remove", String(e));
+    }
   };
 
   if (loading) {
@@ -68,16 +100,13 @@ export function LibraryPanel() {
                 {book.pages && <span>{book.pages} pages</span>}
               </div>
               <div className="mt-2 flex gap-1">
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => open(book.pdf_path)} title="Open PDF">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleOpen(book)} title="Open PDF">
                   <FileText size={12} />
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
-                  const path = book.pdf_path.substring(0, book.pdf_path.lastIndexOf("\\"));
-                  if (path) open(path);
-                }} title="Open file location">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleOpenLocation(book)} title="Open file location">
                   <FolderOpen size={12} />
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleDelete(book.identifier)} title="Remove from library">
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleDelete(book)} title="Remove from library">
                   <Trash2 size={12} />
                 </Button>
               </div>

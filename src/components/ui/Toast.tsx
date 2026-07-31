@@ -46,9 +46,9 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       className={cn("pointer-events-auto mb-3 flex w-80 items-start gap-3 rounded-lg border p-4 shadow-xl backdrop-blur", colors[toast.type])}
     >
       <Icon size={20} className="mt-0.5 shrink-0" />
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{toast.title}</p>
-        {toast.message && <p className="mt-0.5 text-xs opacity-90">{toast.message}</p>}
+        {toast.message && <p className="mt-0.5 max-w-[220px] break-words text-xs opacity-90">{toast.message}</p>}
       </div>
       <button onClick={() => onDismiss(toast.id)} className="shrink-0 opacity-70 hover:opacity-100">
         <X size={14} />

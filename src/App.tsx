@@ -112,7 +112,7 @@ export default function App() {
 
   const startDownload = useCallback(async () => {
     addLog("info", "Starting downloads", JSON.stringify(settings));
-    const pending = itemsRef.current.filter((item) => item.status !== "done" && item.status !== "error");
+    const pending = itemsRef.current.filter((item) => item.status === "pending");
     if (pending.length === 0) return;
     const ids = pending.map((item) => item.id);
     const identifiers = pending.map((item) => item.metadata?.identifier ?? parseBookId(item.urlOrId));
@@ -138,6 +138,7 @@ export default function App() {
     async (id: string) => {
       const item = itemsRef.current.find((i) => i.id === id);
       if (!item) return;
+      if (item.status === "started" || item.status === "downloading" || item.status === "queued") return;
       const identifier = item.metadata?.identifier ?? parseBookId(item.urlOrId);
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "queued" } : i)));
       try {
@@ -290,9 +291,13 @@ export default function App() {
     },
   });
 
-  const openOutput = useCallback(() => {
+  const openOutput = useCallback(async () => {
     if (settings.outputDir) {
-      open(settings.outputDir);
+      try {
+        await open(settings.outputDir);
+      } catch (e) {
+        addToast("error", "Failed to open output directory", String(e));
+      }
     } else {
       addToast("info", "No output directory set", "Set one in Settings first");
     }
@@ -337,7 +342,7 @@ export default function App() {
                 variant="ghost"
                 size="sm"
                 className="mt-1 h-auto px-0 py-0 text-xs text-accent hover:bg-transparent"
-                onClick={() => open(updateUrl)}
+                onClick={async () => { try { await open(updateUrl); } catch (e) { addToast("error", "Failed to open update URL", String(e)); } }}
               >
                 Download now
               </Button>
@@ -372,7 +377,7 @@ export default function App() {
               onOpenOutput={openOutput}
             />
           )}
-          {activeTab === "library" && <LibraryPanel />}
+          {activeTab === "library" && <LibraryPanel addToast={addToast} />}
           {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onBrowse={browseOutputDir} onSave={saveSettings} saveStatus={saveStatus} />}
         </motion.div>
       </main>
