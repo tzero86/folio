@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "../../lib/utils";
@@ -72,13 +72,13 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = (type: ToastType, title: string, message?: string, duration?: number) => {
+  const addToast = useCallback((type: ToastType, title: string, message?: string, duration?: number) => {
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, type, title, message, duration }]);
     return id;
-  };
+  }, []);
 
-  const dismissToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const dismissToast = useCallback((id: string) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
 
   return { toasts, addToast, dismissToast };
 }

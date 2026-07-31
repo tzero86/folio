@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Terminal, X, Trash2, ChevronUp, ChevronDown, Copy } from "lucide-react";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
@@ -18,7 +18,7 @@ interface DebugConsoleProps {
 
 export function useDebugConsole() {
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const addLog = (level: LogLine["level"], message: string, details?: string) => {
+  const addLog = useCallback((level: LogLine["level"], message: string, details?: string) => {
     const line: LogLine = {
       id: crypto.randomUUID(),
       timestamp: new Date().toLocaleTimeString(),
@@ -27,8 +27,8 @@ export function useDebugConsole() {
       details,
     };
     setLogs((prev) => [...prev, line].slice(-500));
-  };
-  const clearLogs = () => setLogs([]);
+  }, []);
+  const clearLogs = useCallback(() => setLogs([]), []);
   return { logs, addLog, clearLogs };
 }
 
