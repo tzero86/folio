@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BookMetadata {
@@ -21,6 +22,7 @@ pub async fn fetch_metadata(identifier: &str) -> Result<BookMetadata> {
 }
 
 pub async fn login(client: &reqwest::Client, email: &str, password: &str) -> Result<()> {
+    info!("logging in as {}", email);
     let token_resp: serde_json::Value = client
         .get("https://archive.org/services/account/login/")
         .send()
@@ -50,10 +52,12 @@ pub async fn login(client: &reqwest::Client, email: &str, password: &str) -> Res
             resp["value"].as_str().unwrap_or("unknown")
         );
     }
+    info!("login successful");
     Ok(())
 }
 
 pub async fn loan_book(client: &reqwest::Client, book_id: &str) -> Result<()> {
+    info!("loaning book {}", book_id);
     let grant = serde_json::json!({
         "action": "grant_access",
         "identifier": book_id

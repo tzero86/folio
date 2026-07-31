@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tokio::sync::Semaphore;
+use tracing::info;
 
 pub async fn download_book<F>(
     client: &reqwest::Client,
@@ -16,10 +17,12 @@ pub async fn download_book<F>(
 where
     F: Fn(&str, Option<&str>),
 {
+    info!("starting download for {}", identifier);
     emit_status("started", None);
 
     super::archive::loan_book(client, identifier).await?;
     let (title, links, metadata) = super::archive::get_book_infos(client, identifier).await?;
+    info!("book {} has {} pages", identifier, links.len());
 
     let dir = output_dir.join(&title);
     tokio::fs::create_dir_all(&dir).await?;
@@ -67,6 +70,7 @@ where
         name.parse::<usize>().unwrap_or(0)
     });
 
+    info!("assembling PDF for {}", identifier);
     emit_status("assembling", None);
 
     let final_path = if create_pdf {

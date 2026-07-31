@@ -13,7 +13,7 @@ import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { ToastContainer, useToast } from "./components/ui/Toast";
-import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook } from "./lib/tauri";
+import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
 import type { QueueItem, AppSettings } from "./types";
@@ -205,6 +205,21 @@ export default function App() {
       if (url) setUpdateUrl(url);
     }).catch(() => null);
   }, []);
+
+  // Poll Rust tracing logs every 2 seconds
+  useEffect(() => {
+    let lastCount = 0;
+    const interval = setInterval(async () => {
+      try {
+        const [lines, total] = await getLogs(lastCount);
+        for (const line of lines) {
+          addLog("debug", line);
+        }
+        lastCount = total;
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [addLog]);
 
 
   useEffect(() => {

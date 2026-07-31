@@ -1,6 +1,7 @@
 mod commands;
 mod downloader;
 mod library;
+mod tracing_logger;
 
 use commands::download::download_books;
 use commands::library::{add_library_book, list_library_books, find_library_book, delete_library_book};
@@ -9,8 +10,20 @@ use commands::update::check_update;
 use sqlx::sqlite::SqlitePool;
 use tauri::Manager;
 
+#[tauri::command]
+fn get_logs(last_count: usize) -> (Vec<String>, usize) {
+    let all = tracing_logger::get_logs();
+    let new = if last_count < all.len() {
+        all[last_count..].to_vec()
+    } else {
+        Vec::new()
+    };
+    (new, all.len())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    tracing_logger::init_tracing();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -35,6 +48,7 @@ pub fn run() {
             fetch_book_metadata,
             download_books,
             check_update,
+            get_logs,
             add_library_book,
             list_library_books,
             find_library_book,

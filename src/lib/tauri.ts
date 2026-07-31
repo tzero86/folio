@@ -60,3 +60,7 @@ export async function findLibraryBook(identifier: string): Promise<LibraryBook |
 export async function deleteLibraryBook(identifier: string): Promise<void> {
   return invoke("delete_library_book", { identifier });
 }
+
+export async function getLogs(lastCount: number): Promise<[string[], number]> {
+  return invoke("get_logs", { lastCount });
+}
