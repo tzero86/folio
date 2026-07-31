@@ -68,7 +68,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
         {(item.status === "downloading" || item.status === "started") && (
           <div className="mt-3">
             <div className="mb-1 flex justify-between text-[10px] text-text-muted">
-              <span>{item.status === "started" ? "Starting..." : "Downloading..."}</span>
+              <span>{item.status === "started" ? "Starting..." : item.progress >= 100 ? "Assembling PDF..." : "Downloading..."}</span>
               <span>{item.progress}%</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-elevated">

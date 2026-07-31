@@ -272,8 +272,12 @@ export default function App() {
   });
 
   const openOutput = useCallback(() => {
-    if (settings.outputDir) open(settings.outputDir);
-  }, [settings.outputDir]);
+    if (settings.outputDir) {
+      open(settings.outputDir);
+    } else {
+      addToast("info", "No output directory set", "Set one in Settings first");
+    }
+  }, [settings.outputDir, addToast]);
 
   return (
     <div className="relative flex h-full w-full flex-col">
