@@ -29,6 +29,31 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             downloaded_at TEXT NOT NULL
         )"
     ).execute(pool).await?;
+    // Migration: rename cover_path to cover_url if old column exists
+    let has_old: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM pragma_table_info('books') WHERE name = 'cover_path'"
+    ).fetch_one(pool).await?;
+    if has_old.0 > 0 {
+        sqlx::query("ALTER TABLE books RENAME TO books_old").execute(pool).await?;
+        sqlx::query(
+            "CREATE TABLE books (
+                id TEXT PRIMARY KEY,
+                identifier TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                creator TEXT,
+                year TEXT,
+                pages INTEGER,
+                pdf_path TEXT NOT NULL,
+                cover_url TEXT,
+                downloaded_at TEXT NOT NULL
+            )"
+        ).execute(pool).await?;
+        sqlx::query(
+            "INSERT INTO books (id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at)
+             SELECT id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at FROM books_old"
+        ).execute(pool).await?;
+        sqlx::query("DROP TABLE books_old").execute(pool).await?;
+    }
     Ok(())
 }
 

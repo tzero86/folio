@@ -77,10 +77,14 @@ export default function App() {
         prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
       );
       addToast("info", "Book added", metadata.title ?? identifier);
-      // Check if already downloaded
-      const existing = await findLibraryBook(identifier);
-      if (existing) {
-        addToast("info", "Already downloaded", `${metadata.title ?? identifier} was downloaded before. Redownload if needed.`);
+      // Check if already downloaded (separate try/catch so it doesn't pollute metadata errors)
+      try {
+        const existing = await findLibraryBook(identifier);
+        if (existing) {
+          addToast("info", "Already downloaded", `${metadata.title ?? identifier} was downloaded before. Redownload if needed.`);
+        }
+      } catch (libErr) {
+        addLog("error", "Library check failed", String(libErr));
       }
     } catch (e) {
       const err = String(e);
