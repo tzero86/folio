@@ -8,23 +8,47 @@ pub async fn download_image(
     book_id: &str,
     output_path: &Path,
 ) -> Result<()> {
-    let mut retries = 0;
-    loop {
+    let max_retries = 3;
+    let mut last_error = None;
+
+    for attempt in 0..max_retries {
         let response = client
             .get(link)
             .header("Referer", "https://archive.org/")
+            .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+            .header("Sec-Fetch-Site", "same-site")
+            .header("Sec-Fetch-Mode", "no-cors")
+            .header("Sec-Fetch-Dest", "image")
             .send()
-            .await?;
+            .await;
 
-        if response.status() == reqwest::StatusCode::FORBIDDEN && retries < 1 {
-            super::archive::loan_book(client, book_id).await?;
-            retries += 1;
+        let response = match response {
+            Ok(r) => r,
+            Err(e) => {
+                last_error = Some(e.into());
+                if attempt < max_retries - 1 {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                continue;
+            }
+        };
+
+        if response.status() == reqwest::StatusCode::FORBIDDEN {
+            super::archive::loan_book(client, book_id).await.ok();
+            last_error = Some(anyhow::anyhow!("access denied (403)"));
+            if attempt < max_retries - 1 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
             continue;
         }
 
         let status = response.status();
         if !status.is_success() {
-            anyhow::bail!("HTTP {status} downloading {link}");
+            last_error = Some(anyhow::anyhow!("HTTP {status} downloading {link}"));
+            if attempt < max_retries - 1 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+            continue;
         }
 
         let obf_header = response
@@ -42,4 +66,6 @@ pub async fn download_image(
         tokio::fs::write(output_path, bytes).await?;
         return Ok(());
     }
+
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("download failed after {max_retries} attempts")))
 }
