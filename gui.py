@@ -189,140 +189,162 @@ class App(ctk.CTk):
 
         # Window setup
         self.title("Archive.org Downloader")
-        self.geometry("800x850") 
-        self.minsize(600, 650)
+        self.geometry("1100x800")
+        self.minsize(900, 700)
+        self.configure(fg_color=COLORS['bg_primary'])
 
-        # Grid configuration
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=10) # Items List
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        self.items_list = [] # Store ItemCard objects
-        
-        # --- 0. Header ---
-        self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 10))
-        self.title_label = ctk.CTkLabel(self.header_frame, text="Archive.org Downloader", font=ctk.CTkFont(size=24, weight="bold"))
-        self.title_label.pack(side="left")
-        
-        self.about_btn = ctk.CTkButton(self.header_frame, text="About", width=60, height=24, command=self.open_about, fg_color="transparent", border_width=1, text_color=("gray10", "gray90"))
+        # Sidebar
+        self.sidebar = ctk.CTkFrame(self, fg_color=COLORS['bg_secondary'], width=320, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_propagate(False)
+        self.sidebar.grid_rowconfigure(2, weight=1)
+
+        # Sidebar header
+        self.header_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.header_frame.pack(fill="x", padx=20, pady=(20, 16))
+        ctk.CTkLabel(self.header_frame, text="Archive.org", font=ctk.CTkFont(size=20, weight="bold"), text_color=COLORS['text_primary']).pack(side="left")
+        ctk.CTkLabel(self.header_frame, text="Downloader", font=ctk.CTkFont(size=20, weight="normal"), text_color=COLORS['text_secondary']).pack(side="left", padx=(4, 0))
+        self.about_btn = IconButton(self.header_frame, "?", command=self.open_about, size=32)
         self.about_btn.pack(side="right")
 
-        # --- 1. Settings Section (Card-like) ---
-        self.settings_frame = ctk.CTkFrame(self)
-        self.settings_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
-        self.settings_frame.grid_columnconfigure(1, weight=1)
+        # Add item input
+        self.input_frame = ctk.CTkFrame(self.sidebar, fg_color=COLORS['bg_elevated'], corner_radius=8, border_width=1, border_color=COLORS['border'])
+        self.input_frame.pack(fill="x", padx=16, pady=(0, 12))
+        self.input_frame.grid_columnconfigure(0, weight=1)
+
+        self.item_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Paste /details/ URL or book ID...", fg_color="transparent", border_width=0, text_color=COLORS['text_primary'])
+        self.item_entry.grid(row=0, column=0, sticky="ew", padx=12, pady=10)
+        self.item_entry.bind("<Return>", lambda e: self.add_item())
+
+        self.add_btn = IconButton(self.input_frame, "+", command=self.add_item, size=32, hover_color=COLORS['accent_hover'], text_color=COLORS['accent'])
+        self.add_btn.grid(row=0, column=1, padx=(0, 8), pady=4)
+
+        self.url_error = ctk.CTkLabel(self.sidebar, text="", font=ctk.CTkFont(size=11), text_color=COLORS['danger'])
+        self.url_error.pack(fill="x", padx=20, pady=(0, 8))
+
+        # Queue list
+        self.list_label = ctk.CTkLabel(self.sidebar, text="Download Queue (0 items)", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS['text_primary'])
+        self.list_label.pack(anchor="w", padx=20, pady=(8, 8))
+
+        self.list_scroll = ctk.CTkScrollableFrame(self.sidebar, fg_color=COLORS['bg_secondary'], corner_radius=0, label_text="")
+        self.list_scroll.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        self.empty_label = ctk.CTkLabel(self.list_scroll, text="Add a book URL to get started", font=ctk.CTkFont(size=13), text_color=COLORS['text_muted'])
+        self.empty_label.pack(pady=40)
+
+        # Clear all link
+        self.clear_btn = ctk.CTkButton(self.sidebar, text="Clear Queue", command=self.clear_items, fg_color="transparent", hover_color=COLORS['bg_elevated'], text_color=COLORS['text_secondary'], font=ctk.CTkFont(size=12), height=28)
+        self.clear_btn.pack(anchor="w", padx=20, pady=(0, 16))
+
+        # Main workspace
+        self.workspace = ctk.CTkFrame(self, fg_color=COLORS['bg_primary'], corner_radius=0)
+        self.workspace.grid(row=0, column=1, sticky="nsew", padx=24, pady=24)
+        self.workspace.grid_columnconfigure(0, weight=1)
+        self.workspace.grid_rowconfigure(1, weight=1)
+
+        # Settings card
+        self.settings_card = ctk.CTkFrame(self.workspace, fg_color=COLORS['bg_secondary'], corner_radius=12, border_width=1, border_color=COLORS['border'])
+        self.settings_card.grid(row=0, column=0, sticky="ew", pady=(0, 16))
+        self.settings_card.grid_columnconfigure(1, weight=1)
+
+        # Settings header with collapse toggle
+        self.settings_header = ctk.CTkFrame(self.settings_card, fg_color="transparent")
+        self.settings_header.grid(row=0, column=0, columnspan=3, sticky="ew", padx=16, pady=(12, 0))
+        self.settings_header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(self.settings_header, text="Settings", font=ctk.CTkFont(size=16, weight="bold"), text_color=COLORS['text_primary']).grid(row=0, column=0, sticky="w")
+        self.collapse_btn = IconButton(self.settings_header, "−", command=self.toggle_settings, size=28)
+        self.collapse_btn.grid(row=0, column=1, sticky="e")
+
+        # Settings body
+        self.settings_body = ctk.CTkFrame(self.settings_card, fg_color="transparent")
+        self.settings_body.grid(row=1, column=0, columnspan=3, sticky="ew", padx=16, pady=12)
+        self.settings_body.grid_columnconfigure(1, weight=1)
 
         creds = load_credentials()
-        
-        # Row 0: Username
-        self.user_label = ctk.CTkLabel(self.settings_frame, text="Username / Email:")
-        self.user_label.grid(row=0, column=0, padx=15, pady=(15, 5), sticky="e")
-        self.user_entry = ctk.CTkEntry(self.settings_frame, placeholder_text="archive.org email")
-        self.user_entry.grid(row=0, column=1, padx=(0, 15), pady=(15, 5), sticky="ew")
+
+        # Email / Password row
+        ctk.CTkLabel(self.settings_body, text="Email:", text_color=COLORS['text_secondary']).grid(row=0, column=0, sticky="e", padx=(0, 10))
+        self.user_entry = ctk.CTkEntry(self.settings_body, placeholder_text="archive.org email", fg_color=COLORS['bg_elevated'], border_color=COLORS['border'], text_color=COLORS['text_primary'])
+        self.user_entry.grid(row=0, column=1, sticky="ew", pady=6)
         self.user_entry.insert(0, creds.get('username', ''))
 
-        # Row 1: Password
-        self.pass_label = ctk.CTkLabel(self.settings_frame, text="Password:")
-        self.pass_label.grid(row=1, column=0, padx=15, pady=5, sticky="e")
-        self.pass_entry = ctk.CTkEntry(self.settings_frame, show="*", placeholder_text="password")
-        self.pass_entry.grid(row=1, column=1, padx=(0, 15), pady=5, sticky="ew")
+        ctk.CTkLabel(self.settings_body, text="Password:", text_color=COLORS['text_secondary']).grid(row=1, column=0, sticky="e", padx=(0, 10))
+        self.pass_entry = ctk.CTkEntry(self.settings_body, show="*", placeholder_text="password", fg_color=COLORS['bg_elevated'], border_color=COLORS['border'], text_color=COLORS['text_primary'])
+        self.pass_entry.grid(row=1, column=1, sticky="ew", pady=6)
         self.pass_entry.insert(0, creds.get('password', ''))
 
-        # Row 2: Output Dir
-        self.dir_label = ctk.CTkLabel(self.settings_frame, text="Output Directory:")
-        self.dir_label.grid(row=2, column=0, padx=15, pady=5, sticky="e")
-        self.dir_entry = ctk.CTkEntry(self.settings_frame, placeholder_text="Select download location...")
-        self.dir_entry.grid(row=2, column=1, padx=(0, 5), pady=5, sticky="ew")
+        # Output dir row
+        ctk.CTkLabel(self.settings_body, text="Output:", text_color=COLORS['text_secondary']).grid(row=2, column=0, sticky="e", padx=(0, 10))
+        self.dir_entry = ctk.CTkEntry(self.settings_body, placeholder_text="Select download folder...", fg_color=COLORS['bg_elevated'], border_color=COLORS['border'], text_color=COLORS['text_primary'])
+        self.dir_entry.grid(row=2, column=1, sticky="ew", pady=6)
         last_dir = creds.get('output_dir', '')
         self.dir_entry.insert(0, last_dir if last_dir else os.getcwd())
-        
-        self.browse_btn = ctk.CTkButton(self.settings_frame, text="Browse", width=80, command=self.browse_dir)
-        self.browse_btn.grid(row=2, column=2, padx=15, pady=5)
-        
-        # Row 3: Advanced Options (Collapsible-ish via checkbox or just visible)
-        # Let's make a dedicated row for it
-        self.adv_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
-        self.adv_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=15, pady=(5, 10))
-        
-        ctk.CTkLabel(self.adv_frame, text="Advanced:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(0, 10))
-        
+        self.browse_btn = ctk.CTkButton(self.settings_body, text="Browse", width=80, command=self.browse_dir, fg_color=COLORS['bg_elevated'], hover_color=COLORS['bg_primary'], text_color=COLORS['text_primary'], border_color=COLORS['border'], border_width=1)
+        self.browse_btn.grid(row=2, column=2, padx=(10, 0))
+
+        # Advanced row
+        self.adv_frame = ctk.CTkFrame(self.settings_body, fg_color="transparent")
+        self.adv_frame.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(10, 0))
+
         self.pdf_var = ctk.BooleanVar(value=True)
-        self.pdf_check = ctk.CTkCheckBox(self.adv_frame, text="Generate PDF", variable=self.pdf_var)
-        self.pdf_check.pack(side="left", padx=10)
-        
+        ctk.CTkCheckBox(self.adv_frame, text="Generate PDF", variable=self.pdf_var, fg_color=COLORS['accent'], text_color=COLORS['text_secondary']).pack(side="left", padx=(0, 16))
+
         self.meta_var = ctk.BooleanVar(value=False)
-        self.meta_check = ctk.CTkCheckBox(self.adv_frame, text="Save Metadata", variable=self.meta_var)
-        self.meta_check.pack(side="left", padx=10)
-        
-        ctk.CTkLabel(self.adv_frame, text="Resolution:").pack(side="left", padx=(20, 5))
-        self.res_option = ctk.CTkOptionMenu(self.adv_frame, values=["0 (Best)", "1", "2", "3 (Default)", "4", "5"], width=100)
+        ctk.CTkCheckBox(self.adv_frame, text="Save Metadata", variable=self.meta_var, fg_color=COLORS['accent'], text_color=COLORS['text_secondary']).pack(side="left", padx=(0, 16))
+
+        ctk.CTkLabel(self.adv_frame, text="Resolution:", text_color=COLORS['text_secondary']).pack(side="left", padx=(16, 8))
+        self.res_option = ctk.CTkOptionMenu(self.adv_frame, values=["0 (Best)", "1", "2", "3 (Default)", "4", "5"], width=110, fg_color=COLORS['bg_elevated'], button_color=COLORS['bg_elevated'], button_hover_color=COLORS['bg_primary'], text_color=COLORS['text_primary'])
         self.res_option.set("3 (Default)")
         self.res_option.pack(side="left")
 
-        # Row 4: Buttons
-        self.save_btn = ctk.CTkButton(self.settings_frame, text="Save Credentials", command=self.save_creds, height=32)
-        self.save_btn.grid(row=4, column=0, columnspan=3, padx=15, pady=(10, 15), sticky="ew")
+        # Save credentials
+        self.save_btn = ctk.CTkButton(self.settings_body, text="Save Credentials", command=self.save_creds, height=32, fg_color="transparent", hover_color=COLORS['bg_elevated'], text_color=COLORS['text_secondary'], border_color=COLORS['border'], border_width=1)
+        self.save_btn.grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 4))
 
-        # --- 2. Items Section ---
-        self.items_container = ctk.CTkFrame(self, fg_color="transparent")
-        self.items_container.grid(row=2, column=0, sticky="nsew", padx=20, pady=10)
-        self.items_container.grid_rowconfigure(2, weight=1)
-        self.items_container.grid_columnconfigure(0, weight=1)
+        # Console output
+        self.output_frame = ctk.CTkFrame(self.workspace, fg_color=COLORS['bg_secondary'], corner_radius=12, border_width=1, border_color=COLORS['border'])
+        self.output_frame.grid(row=1, column=0, sticky="nsew")
+        self.output_frame.grid_rowconfigure(2, weight=1)
+        self.output_frame.grid_columnconfigure(0, weight=1)
 
-        # Input Row
-        self.input_frame = ctk.CTkFrame(self.items_container, fg_color="transparent")
-        self.input_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        
-        self.item_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Enter Identifier or URL (e.g., https://archive.org/details/...)")
-        self.item_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.item_entry.bind("<Return>", lambda e: self.add_item())
-        
-        self.add_btn = ctk.CTkButton(self.input_frame, text="Add Item", width=100, command=self.add_item)
-        self.add_btn.pack(side="right")
+        self.output_header = ctk.CTkFrame(self.output_frame, fg_color="transparent")
+        self.output_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 8))
+        ctk.CTkLabel(self.output_header, text="Console Output", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS['text_primary']).pack(side="left")
 
-        # List Header Row (Label + Clear Button)
-        self.list_header_frame = ctk.CTkFrame(self.items_container, fg_color="transparent")
-        self.list_header_frame.grid(row=1, column=0, sticky="ew", pady=(0, 5))
-        
-        self.list_label = ctk.CTkLabel(self.list_header_frame, text="Download Queue (0 items)", font=ctk.CTkFont(size=14, weight="bold"))
-        self.list_label.pack(side="left")
-        
-        self.clear_btn = ctk.CTkButton(self.list_header_frame, text="Clear All", width=80, height=24, fg_color="#ef4444", hover_color="#dc2626", command=self.clear_items)
-        self.clear_btn.pack(side="right")
-        
-        self.list_scroll = ctk.CTkScrollableFrame(self.items_container, label_text="Items")
-        self.list_scroll.grid(row=2, column=0, sticky="nsew")
-
-        # --- 3. Action Section ---
-        self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.action_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=10)
-        
-        self.start_btn = ctk.CTkButton(self.action_frame, text="START DOWNLOAD", command=self.start_download, 
-                                       height=45, font=ctk.CTkFont(size=16, weight="bold"), 
-                                       fg_color="#10b981", hover_color="#059669")
-        self.start_btn.pack(fill="x")
-
-        # --- 4. Output Section ---
-        self.output_frame = ctk.CTkFrame(self)
-        self.output_frame.grid(row=4, column=0, sticky="nsew", padx=20, pady=(0, 20))
-        self.grid_rowconfigure(2, weight=10)
-        self.grid_rowconfigure(4, weight=1)
-        
-        # Progress Bar
-        self.progress_bar = ctk.CTkProgressBar(self.output_frame, height=12)
+        self.progress_bar = ctk.CTkProgressBar(self.output_frame, height=6, fg_color=COLORS['bg_elevated'], progress_color=COLORS['accent'], corner_radius=3)
         self.progress_bar.set(0)
-        self.progress_bar.pack(fill="x", padx=10, pady=(10, 5))
+        self.progress_bar.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 8))
 
-        self.output_label = ctk.CTkLabel(self.output_frame, text="Console Output", anchor="w")
-        self.output_label.pack(fill="x", padx=10, pady=(5, 0))
-        
-        self.output_text = ctk.CTkTextbox(self.output_frame, font=("Consolas", 12))
-        self.output_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.output_text = ctk.CTkTextbox(self.output_frame, fg_color=COLORS['bg_primary'], border_color=COLORS['border'], border_width=1, text_color=COLORS['text_secondary'], font=("SF Mono", 12) if sys.platform == "darwin" else ("Consolas", 12))
+        self.output_text.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 16))
         self.output_text.configure(state="disabled")
 
-        # --- Queue ---
+        # Bottom action bar
+        self.action_frame = ctk.CTkFrame(self, fg_color=COLORS['bg_secondary'], height=72, corner_radius=0)
+        self.action_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.action_frame.grid_propagate(False)
+        self.action_frame.grid_columnconfigure(0, weight=1)
+
+        self.start_btn = ctk.CTkButton(self.action_frame, text="Download 0 Books", command=self.start_download, height=44, font=ctk.CTkFont(size=15, weight="bold"), fg_color=COLORS['accent'], hover_color=COLORS['accent_hover'], text_color=COLORS['bg_primary'], corner_radius=8)
+        self.start_btn.grid(row=0, column=0, sticky="ew", padx=20, pady=14)
+
+        # Internal state
+        self.items_list: list[ItemCard] = []
         self._output_queue = queue.Queue()
         self._running_thread = None
+        self._settings_expanded = True
+
+    def toggle_settings(self):
+        if self._settings_expanded:
+            self.settings_body.grid_remove()
+            self.collapse_btn.configure(text="+")
+        else:
+            self.settings_body.grid()
+            self.collapse_btn.configure(text="−")
+        self._settings_expanded = not self._settings_expanded
 
     def save_creds(self):
         answer = messagebox.askyesno(
