@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Store } from "@tauri-apps/plugin-store";
+import { load as loadStore, Store } from "@tauri-apps/plugin-store";
 import { Button } from "./components/ui/Button";
 import { QueuePanel } from "./components/queue/QueuePanel";
 import { LibraryPanel } from "./components/library/LibraryPanel";
@@ -166,27 +166,42 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      const store = await Store.load("settings.bin");
-      storeRef.current = store;
-      const saved = await store.get<AppSettings>("settings");
-      if (saved) {
-        addLog("info", "Loaded saved settings", JSON.stringify(saved));
-        setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
+      try {
+        const store = await loadStore("settings.bin");
+        storeRef.current = store;
+        const saved = await store.get<AppSettings>("settings");
+        if (saved) {
+          addLog("info", "Loaded saved settings", JSON.stringify(saved));
+          setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
+        } else {
+          addLog("info", "No saved settings found");
+        }
+      } catch (e) {
+        addLog("error", "Failed to load settings", String(e));
       }
     };
-    init().catch(() => null);
+    init();
   }, []);
 
   const saveSettings = useCallback(async () => {
     const store = storeRef.current;
-    if (!store) return;
+    if (!store) {
+      addLog("error", "Cannot save settings: store not loaded");
+      return;
+    }
     setSaveStatus("saving");
     addLog("info", "Saving settings");
-    await store.set("settings", settings);
-    await store.save();
-    setSaveStatus("saved");
-    setTimeout(() => setSaveStatus("idle"), 1500);
-  }, [settings]);
+    try {
+      await store.set("settings", settings);
+      await store.save();
+      setSaveStatus("saved");
+      addLog("info", "Settings saved");
+      setTimeout(() => setSaveStatus("idle"), 1500);
+    } catch (e) {
+      addLog("error", "Failed to save settings", String(e));
+      setSaveStatus("idle");
+    }
+  }, [settings, addLog]);
 
   const browseOutputDir = useCallback(async () => {
     addLog("info", "Opening output directory picker");
