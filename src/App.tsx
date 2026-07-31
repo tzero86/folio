@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Library, List, Settings, Info } from "lucide-react";
+import { Library, List, Settings, Info, Search } from "lucide-react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
@@ -8,6 +8,7 @@ import { load as loadStore, Store } from "@tauri-apps/plugin-store";
 import { Button } from "./components/ui/Button";
 import { QueuePanel } from "./components/queue/QueuePanel";
 import { LibraryPanel } from "./components/library/LibraryPanel";
+import { SearchPanel } from "./components/search/SearchPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
@@ -19,10 +20,11 @@ import { cn } from "./lib/utils";
 import type { QueueItem, AppSettings } from "./types";
 import "./index.css";
 
-type Tab = "queue" | "library" | "settings";
+type Tab = "queue" | "search" | "library" | "settings";
 
 const NAV: { id: Tab; label: string; icon: typeof List }[] = [
   { id: "queue", label: "Queue", icon: List },
+  { id: "search", label: "Search", icon: Search },
   { id: "library", label: "Library", icon: Library },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -378,6 +380,9 @@ export default function App() {
               onDownloadItem={startSingleDownload}
               onOpenOutput={openOutput}
             />
+          )}
+          {activeTab === "search" && (
+            <SearchPanel onAdd={addItem} addToast={addToast} />
           )}
           {activeTab === "library" && <LibraryPanel addToast={addToast} />}
           {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onBrowse={browseOutputDir} onSave={saveSettings} saveStatus={saveStatus} />}

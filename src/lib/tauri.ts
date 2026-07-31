@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { BookMetadata, AppSettings } from "../types";
+import type { BookMetadata, AppSettings, SearchResponse } from "../types";
 
 export async function fetchBookMetadata(identifier: string): Promise<BookMetadata> {
   return invoke("fetch_book_metadata", { identifier });
@@ -63,4 +63,8 @@ export async function deleteLibraryBook(identifier: string): Promise<void> {
 
 export async function getLogs(lastCount: number): Promise<[string[], number]> {
   return invoke("get_logs", { lastCount });
+}
+
+export async function searchArchive(query: string, page: number, rows = 50): Promise<SearchResponse> {
+  return invoke("search_archive", { req: { query, page, rows } });
 }

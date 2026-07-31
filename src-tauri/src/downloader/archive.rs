@@ -159,6 +159,91 @@ fn extract_info_url(body: &str) -> Result<String> {
     Ok(format!("https:{}", url.replace("\\u0026", "&")))
 }
 
+pub async fn search_books(req: &crate::commands::search::SearchRequest) -> Result<crate::commands::search::SearchResponse> {
+    let q = if req.query.trim().is_empty() {
+        "mediatype:texts".to_string()
+    } else {
+        format!("({}) AND mediatype:texts", req.query.trim())
+    };
+    let start = (req.page.saturating_sub(1)) * req.rows;
+
+    let client = reqwest::Client::new();
+    let resp: serde_json::Value = client
+        .get("https://archive.org/advancedsearch.php")
+        .query(&[
+            ("q", q.as_str()),
+            ("output", "json"),
+            ("rows", &req.rows.to_string()),
+            ("page", &req.page.to_string()),
+        ])
+        .query(&[
+            ("fl[]", "identifier"),
+            ("fl[]", "title"),
+            ("fl[]", "creator"),
+            ("fl[]", "year"),
+            ("fl[]", "description"),
+        ])
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let response = resp
+        .get("response")
+        .context("search response missing")?;
+    let num_found = response
+        .get("numFound")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let docs = response
+        .get("docs")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|d| crate::commands::search::SearchResult {
+                    identifier: d
+                        .get("identifier")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    title: d
+                        .get("title")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Untitled")
+                        .to_string(),
+                    creator: d.get("creator").and_then(|v| {
+                        if let Some(arr) = v.as_array() {
+                            arr.first()
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string())
+                        } else {
+                            v.as_str().map(|s| s.to_string())
+                        }
+                    }),
+                    year: d
+                        .get("year")
+                        .and_then(|v| v.as_str().map(String::from).or_else(|| v.as_i64().map(|n| n.to_string()))),
+                    description: d.get("description").and_then(|v| {
+                        if let Some(arr) = v.as_array() {
+                            arr.first()
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string())
+                        } else {
+                            v.as_str().map(|s| s.to_string())
+                        }
+                    }),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(crate::commands::search::SearchResponse {
+        num_found,
+        start,
+        docs,
+    })
+}
+
 fn parse_metadata(data: &serde_json::Value, identifier: &str) -> Result<BookMetadata> {
     let metadata = data
         .get("data")

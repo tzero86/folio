@@ -29,3 +29,17 @@ export interface AppSettings {
   saveCredentials: boolean;
   saveMetadata: boolean;
 }
+
+export interface SearchResult {
+  identifier: string;
+  title: string;
+  creator: string | null;
+  year: string | null;
+  description: string | null;
+}
+
+export interface SearchResponse {
+  num_found: number;
+  start: number;
+  docs: SearchResult[];
+}
