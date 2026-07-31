@@ -3,6 +3,8 @@ import { Library, List, Settings, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Store } from "@tauri-apps/plugin-store";
 import { Button } from "./components/ui/Button";
 import { QueuePanel } from "./components/queue/QueuePanel";
 import { LibraryPanel } from "./components/library/LibraryPanel";
@@ -34,6 +36,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("queue");
   const [items, setItems] = useState<QueueItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const storeRef = useRef<Store | null>(null);
   const [settings, setSettings] = useState<AppSettings>({
     email: "",
     password: "",
@@ -149,6 +153,34 @@ export default function App() {
     }).catch(() => null);
   }, []);
 
+
+  useEffect(() => {
+    const init = async () => {
+      const store = await Store.load("settings.bin");
+      storeRef.current = store;
+      const saved = await store.get<AppSettings>("settings");
+      if (saved) {
+        setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
+      }
+    };
+    init().catch(() => null);
+  }, []);
+
+  const saveSettings = useCallback(async () => {
+    const store = storeRef.current;
+    if (!store) return;
+    setSaveStatus("saving");
+    await store.set("settings", settings);
+    await store.save();
+    setSaveStatus("saved");
+    setTimeout(() => setSaveStatus("idle"), 1500);
+  }, [settings]);
+
+  const browseOutputDir = useCallback(async () => {
+    const dir = await openDialog({ directory: true });
+    if (dir) setSettings((prev) => ({ ...prev, outputDir: dir }));
+  }, []);
+
   useShortcuts({
     addFromClipboard: () => {
       navigator.clipboard.readText().then((text) => {
@@ -244,7 +276,7 @@ export default function App() {
             />
           )}
           {activeTab === "library" && <LibraryPanel />}
-          {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} />}
+          {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onBrowse={browseOutputDir} onSave={saveSettings} saveStatus={saveStatus} />}
         </motion.div>
       </main>
 

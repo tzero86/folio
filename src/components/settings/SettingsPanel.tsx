@@ -1,4 +1,4 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Save } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import type { AppSettings } from "../../types";
@@ -6,16 +6,31 @@ import type { AppSettings } from "../../types";
 interface SettingsPanelProps {
   settings: AppSettings;
   onChange: (settings: AppSettings) => void;
+  onBrowse: () => void;
+  onSave: () => void;
+  saveStatus?: "idle" | "saving" | "saved";
 }
 
-export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus = "idle" }: SettingsPanelProps) {
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     onChange({ ...settings, [key]: value });
   };
 
   return (
     <div className="mx-auto max-w-2xl p-6">
-      <h2 className="mb-6 text-2xl font-semibold">Settings</h2>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-2xl font-semibold">Settings</h2>
+        <div className="flex items-center gap-3">
+          {saveStatus === "saved" && (
+            <span className="text-sm text-success">Saved</span>
+          )}
+          <Button onClick={onSave} disabled={saveStatus === "saving"}>
+            <Save size={16} />
+            {saveStatus === "saving" ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </div>
+
       <div className="space-y-5 rounded-xl border border-border bg-bg-secondary p-5">
         <div className="space-y-2">
           <label className="text-sm font-medium text-text-secondary">Archive.org email</label>
@@ -40,9 +55,10 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
         <div className="space-y-2">
           <label className="text-sm font-medium text-text-secondary">Output directory</label>
           <div className="flex gap-2">
-            <Input value={settings.outputDir} readOnly className="flex-1" />
-            <Button variant="secondary" onClick={() => { /* dialog handled by parent */ }} type="button">
+            <Input value={settings.outputDir} readOnly className="flex-1" placeholder="Select a folder..." />
+            <Button variant="secondary" onClick={onBrowse} type="button">
               <FolderOpen size={16} />
+              Browse
             </Button>
           </div>
         </div>
