@@ -31,9 +31,11 @@ pub async fn login(client: &reqwest::Client, email: &str, password: &str) -> Res
         .as_str()
         .context("login token missing")?;
 
+    let data = serde_json::json!({"username": email, "password": password, "t": token});
     let resp_text = client
         .post("https://archive.org/services/account/login/")
-        .form(&[("username", email), ("password", password), ("t", token)])
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(data.to_string())
         .send()
         .await?
         .text()
