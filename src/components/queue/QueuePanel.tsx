@@ -165,7 +165,6 @@ export function QueuePanel({
           fields={detailsFields}
           onClose={() => onSelect("")}
           actions={detailsActions}
-          className="w-80"
         />
       )}
     </div>

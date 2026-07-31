@@ -22,6 +22,11 @@ fn get_logs(last_count: usize) -> (Vec<String>, usize) {
     (new, all.len())
 }
 
+#[tauri::command]
+fn read_pdf_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_logger::init_tracing();
@@ -51,6 +56,7 @@ pub fn run() {
             download_books,
             check_update,
             get_logs,
+            read_pdf_bytes,
             add_library_book,
             list_library_books,
             find_library_book,

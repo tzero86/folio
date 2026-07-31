@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Terminal, X, Trash2, ChevronUp, ChevronDown, Copy } from "lucide-react";
+import { Terminal, X, Trash2, ChevronUp, ChevronDown, Copy, GripHorizontal } from "lucide-react";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
+
+const STORAGE_HEIGHT = "folio.ui.consoleHeight";
+const DEFAULT_HEIGHT = 288;
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 520;
 
 export interface LogLine {
   id: string;
@@ -34,8 +39,50 @@ export function useDebugConsole() {
 
 export function DebugConsole({ logs, onClear }: DebugConsoleProps) {
   const [expanded, setExpanded] = useState(false);
+  const [height, setHeight] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_HEIGHT);
+      return raw !== null ? (JSON.parse(raw) as number) : DEFAULT_HEIGHT;
+    } catch {
+      return DEFAULT_HEIGHT;
+    }
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ startY: number; startHeight: number } | null>(null);
+
+  const setHeightPersisted = useCallback((h: number) => {
+    setHeight(h);
+    try {
+      localStorage.setItem(STORAGE_HEIGHT, JSON.stringify(h));
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) return;
+    if (!dragState.current) return;
+    const onMove = (e: MouseEvent) => {
+      const s = dragState.current;
+      if (!s) return;
+      const next = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, s.startHeight - (e.clientY - s.startY)));
+      setHeightPersisted(next);
+    };
+    const onUp = () => {
+      dragState.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [expanded, setHeightPersisted]);
 
   useEffect(() => {
     if (expanded) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,10 +98,26 @@ export function DebugConsole({ logs, onClear }: DebugConsoleProps) {
   return (
     <div
       className={cn(
-        "flex w-full shrink-0 flex-col border-t border-border bg-bg-secondary transition-all",
-        expanded ? "h-72" : "h-10"
+        "relative flex w-full shrink-0 flex-col border-t border-border bg-bg-secondary transition-colors",
+        expanded ? "" : "h-10"
       )}
+      style={expanded ? { height } : undefined}
     >
+      {expanded && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize debug console"
+          onMouseDown={(e) => {
+            dragState.current = { startY: e.clientY, startHeight: height };
+            document.body.style.cursor = "row-resize";
+            document.body.style.userSelect = "none";
+          }}
+          className="absolute inset-x-0 -top-1 z-10 flex h-2 cursor-row-resize items-center justify-center text-text-muted hover:text-accent"
+        >
+          <GripHorizontal size={12} />
+        </div>
+      )}
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
         <button
           onClick={() => setExpanded((v) => !v)}

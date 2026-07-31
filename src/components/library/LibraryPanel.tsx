@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { BookOpen, FileText, Trash2, FolderOpen } from "lucide-react";
+import { BookOpen, FileText, Trash2, FolderOpen, Eye } from "lucide-react";
 import { Button } from "../ui/Button";
 import { BookDetails } from "../ui/BookDetails";
+import { PdfViewerDialog } from "../ui/PdfViewerDialog";
 import { listLibraryBooks, deleteLibraryBook } from "../../lib/tauri";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { cn } from "../../lib/utils";
@@ -16,6 +17,7 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -67,7 +69,13 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
 
   const detailsActions = selected ? (
     <>
-      <Button size="sm" onClick={() => handleOpen(selected)}>
+      {isPdf(selected.pdf_path) && (
+        <Button size="sm" onClick={() => setViewerPath(selected.pdf_path)}>
+          <Eye size={14} />
+          View
+        </Button>
+      )}
+      <Button variant="secondary" size="sm" onClick={() => handleOpen(selected)}>
         <FileText size={14} />
         Open PDF
       </Button>
@@ -128,7 +136,7 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
                   "flex gap-3 rounded-xl border p-3 text-left transition-colors",
                   selected?.identifier === book.identifier
                     ? "border-accent bg-accent-subtle"
-                    : "border-border bg-bg-secondary hover:bg-bg-elevated"
+                    : "border-border bg-bg-secondary hover:bg-bg-elevated hover:shadow-lg hover:shadow-black/20"
                 )}
               >
                 <div className="h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md bg-bg-elevated">
@@ -167,6 +175,15 @@ export function LibraryPanel({ addToast }: LibraryPanelProps) {
           fields={detailsFields}
           onClose={() => setSelected(null)}
           actions={detailsActions}
+        />
+      )}
+
+      {viewerPath && (
+        <PdfViewerDialog
+          open
+          path={viewerPath}
+          title={selected?.title ?? "PDF"}
+          onClose={() => setViewerPath(null)}
         />
       )}
     </div>

@@ -88,6 +88,19 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
         </div>
 
         <div className="flex items-center justify-between">
+          <div>
+            <label className="text-sm font-medium text-text-secondary">Auto-download added books</label>
+            <p className="text-xs text-text-muted">Starts the download immediately when a book is added, if an output directory is set.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.autoDownload}
+            onChange={(e) => update("autoDownload", e.target.checked)}
+            className="accent-accent h-4 w-4"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-text-secondary">Save metadata.json</label>
           <input
             type="checkbox"

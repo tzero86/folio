@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Library, List, Settings, Info, Search } from "lucide-react";
+import { Library, List, Settings, Info, Search, ChevronsRight, ChevronsLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
@@ -53,6 +53,7 @@ export default function App() {
     createPdf: true,
     saveCredentials: false,
     saveMetadata: false,
+    autoDownload: true,
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -61,49 +62,75 @@ export default function App() {
   const itemsRef = useRef(items);
   itemsRef.current = items;
 
-  const addItem = useCallback(async (input: string) => {
-    addLog("info", `Adding item: ${input}`);
-    const id = crypto.randomUUID();
-    const identifier = parseBookId(input);
-    const newItem: QueueItem = {
-      id,
-      urlOrId: input,
-      status: "fetching",
-      progress: 0,
-    };
-    setItems((prev) => [newItem, ...prev]);
-    setSelectedId(id);
-    try {
-      const cached = metadataCache.get(identifier);
-      const metadata = cached ?? (await fetchBookMetadata(identifier));
-      if (!cached) metadataCache.set(identifier, metadata);
-      addLog("info", cached ? `Loaded cached metadata for ${identifier}` : `Fetched metadata for ${identifier}`, JSON.stringify(metadata, null, 2));
-      setItems((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
-      );
-      addToast("info", "Book added", metadata.title ?? identifier);
-      // Check if already downloaded (separate try/catch so it doesn't pollute metadata errors)
+  /** Mark a queue item queued and fire the backend download. Errors from the
+   *  actual download arrive via status events; this only handles invoke errors. */
+  const downloadSingle = useCallback(
+    (id: string, identifier: string) => {
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "queued" } : i)));
+      downloadBooks(settings, [identifier]).catch((e) => {
+        const err = String(e);
+        addLog("error", "Download failed to start", err);
+        addToast("error", "Download failed", err);
+        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "error", error: err } : i)));
+      });
+    },
+    [settings, addLog, addToast]
+  );
+
+  const addItem = useCallback(
+    async (input: string) => {
+      addLog("info", `Adding item: ${input}`);
+      const id = crypto.randomUUID();
+      const identifier = parseBookId(input);
+      const newItem: QueueItem = {
+        id,
+        urlOrId: input,
+        status: "fetching",
+        progress: 0,
+      };
+      setItems((prev) => [newItem, ...prev]);
+      setSelectedId(id);
       try {
-        const existing = await findLibraryBook(identifier);
-        if (existing) {
-          addToast("info", "Already downloaded", `${metadata.title ?? identifier} was downloaded before. Redownload if needed.`);
+        const cached = metadataCache.get(identifier);
+        const metadata = cached ?? (await fetchBookMetadata(identifier));
+        if (!cached) metadataCache.set(identifier, metadata);
+        addLog("info", cached ? `Loaded cached metadata for ${identifier}` : `Fetched metadata for ${identifier}`, JSON.stringify(metadata, null, 2));
+        setItems((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
+        );
+        addToast("info", "Book added", metadata.title ?? identifier);
+
+        if (settings.autoDownload && settings.outputDir) {
+          downloadSingle(id, identifier);
+          addToast("info", "Download started", metadata.title ?? identifier);
+        } else if (settings.autoDownload) {
+          addToast("info", "Output directory not set", "Set one in Settings to auto-download.");
         }
-      } catch (libErr) {
-        addLog("error", "Library check failed", String(libErr));
+
+        // Check if already downloaded (separate try/catch so it doesn't pollute metadata errors)
+        try {
+          const existing = await findLibraryBook(identifier);
+          if (existing) {
+            addToast("info", "Already downloaded", `${metadata.title ?? identifier} was downloaded before. Redownload if needed.`);
+          }
+        } catch (libErr) {
+          addLog("error", "Library check failed", String(libErr));
+        }
+      } catch (e) {
+        const err = String(e);
+        addLog("error", `Metadata fetch failed for ${identifier}`, err);
+        addToast("error", "Failed to fetch book metadata", err);
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, status: "error", error: err, metadata: { identifier, title: identifier } }
+              : item
+          )
+        );
       }
-    } catch (e) {
-      const err = String(e);
-      addLog("error", `Metadata fetch failed for ${identifier}`, err);
-      addToast("error", "Failed to fetch book metadata", err);
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, status: "error", error: err, metadata: { identifier, title: identifier } }
-            : item
-        )
-      );
-    }
-  }, [addLog]);
+    },
+    [addLog, addToast, settings.autoDownload, settings.outputDir, downloadSingle]
+  );
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -140,21 +167,14 @@ export default function App() {
   }, [settings, addLog]);
 
   const startSingleDownload = useCallback(
-    async (id: string) => {
+    (id: string) => {
       const item = itemsRef.current.find((i) => i.id === id);
       if (!item) return;
       if (item.status === "started" || item.status === "downloading" || item.status === "queued") return;
       const identifier = item.metadata?.identifier ?? parseBookId(item.urlOrId);
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "queued" } : i)));
-      try {
-        await downloadBooks(settings, [identifier]);
-      } catch (e) {
-        setItems((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, status: "error", error: String(e) } : i))
-        );
-      }
+      downloadSingle(id, identifier);
     },
-    [settings]
+    [downloadSingle]
   );
 
   const handleStatus = useCallback((payload: { id: string; status: string; pdf?: string; message?: string; current?: string; total?: string }) => {
@@ -310,17 +330,53 @@ export default function App() {
     }
   }, [settings.outputDir, addToast]);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem("folio.ui.sidebarCollapsed");
+      return raw !== null ? (JSON.parse(raw) as boolean) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("folio.ui.sidebarCollapsed", JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <div className="relative flex h-full w-full flex-col">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <div className="flex min-h-0 w-full flex-1">
-        <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-bg-secondary">
-        <div className="flex items-center gap-3 border-b border-border p-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold">F</div>
-          <div>
-            <h1 className="text-sm font-bold tracking-tight text-text-primary">Folio</h1>
-            <p className="text-xs text-text-muted">Archive.org Downloader</p>
-          </div>
+        <aside className={cn("flex shrink-0 flex-col border-r border-border bg-bg-secondary transition-[width] duration-150", sidebarCollapsed ? "w-14" : "w-64")}>
+        <div className={cn("flex items-center border-b border-border p-3", sidebarCollapsed ? "justify-center" : "justify-between")}>
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold">F</div>
+              <div>
+                <h1 className="text-sm font-bold tracking-tight text-text-primary">Folio</h1>
+                <p className="text-xs text-text-muted">Archive.org Downloader</p>
+              </div>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-white font-bold">F</div>
+          )}
+          <button
+            onClick={toggleSidebar}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-bg-elevated hover:text-text-primary"
+          >
+            {sidebarCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+          </button>
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
@@ -328,21 +384,24 @@ export default function App() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
+              aria-label={sidebarCollapsed ? label : undefined}
+              title={sidebarCollapsed ? label : undefined}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                sidebarCollapsed ? "justify-center px-2" : "",
                 activeTab === id
                   ? "bg-accent-subtle text-accent"
                   : "text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
               )}
             >
               <Icon size={18} />
-              {label}
+              {!sidebarCollapsed && label}
             </button>
           ))}
         </nav>
 
         <div className="border-t border-border p-3">
-          {updateUrl && (
+          {updateUrl && !sidebarCollapsed && (
             <div className="mb-3 rounded-lg border border-accent/30 bg-accent-subtle p-2.5">
               <p className="text-xs font-medium text-accent">Update available</p>
               <Button
@@ -355,9 +414,15 @@ export default function App() {
               </Button>
             </div>
           )}
-          <Button variant="ghost" className="w-full justify-start gap-2 text-text-secondary" onClick={() => setAboutOpen(true)}>
+          <Button
+            variant="ghost"
+            className={cn("w-full justify-start gap-2 text-text-secondary", sidebarCollapsed ? "justify-center px-2" : "")}
+            onClick={() => setAboutOpen(true)}
+            title="About"
+            aria-label="About"
+          >
             <Info size={16} />
-            About
+            {!sidebarCollapsed && "About"}
           </Button>
         </div>
       </aside>

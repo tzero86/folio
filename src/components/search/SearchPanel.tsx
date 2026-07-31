@@ -171,7 +171,7 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
                     "flex gap-3 rounded-xl border p-3 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                     selected?.identifier === result.identifier
                       ? "border-accent bg-accent-subtle"
-                      : "border-border bg-bg-secondary hover:bg-bg-elevated"
+                      : "border-border bg-bg-secondary hover:bg-bg-elevated hover:shadow-lg hover:shadow-black/20"
                   )}
                 >
                   <div className="h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md bg-bg-elevated">

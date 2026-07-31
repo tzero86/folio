@@ -28,6 +28,7 @@ export interface AppSettings {
   createPdf: boolean;
   saveCredentials: boolean;
   saveMetadata: boolean;
+  autoDownload: boolean;
 }
 
 export interface SearchResult {

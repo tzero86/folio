@@ -65,6 +65,10 @@ export async function getLogs(lastCount: number): Promise<[string[], number]> {
   return invoke("get_logs", { lastCount });
 }
 
+export async function readPdfBytes(path: string): Promise<number[]> {
+  return invoke("read_pdf_bytes", { path });
+}
+
 export async function searchArchive(query: string, page: number, rows = 50): Promise<SearchResponse> {
   return invoke("search_archive", { req: { query, page, rows } });
 }

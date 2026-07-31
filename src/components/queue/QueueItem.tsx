@@ -36,7 +36,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
         "group flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         isSelected
           ? "border-accent bg-accent-subtle"
-          : "border-border bg-bg-secondary hover:bg-bg-elevated"
+          : "border-border bg-bg-secondary hover:bg-bg-elevated hover:shadow-lg hover:shadow-black/20"
       )}
     >
       <div className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md bg-bg-elevated">
