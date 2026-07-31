@@ -14,7 +14,17 @@ export interface DownloadStatusPayload {
 }
 
 export async function downloadBooks(settings: AppSettings, identifiers: string[]): Promise<void> {
-  return invoke("download_books", { request: { ...settings, identifiers } });
+  return invoke("download_books", {
+    request: {
+      email: settings.email,
+      password: settings.password,
+      identifiers,
+      output_dir: settings.outputDir,
+      resolution: settings.resolution,
+      create_pdf: settings.createPdf,
+      save_credentials: settings.saveCredentials,
+    },
+  });
 }
 
 export function onDownloadStatus(callback: (payload: DownloadStatusPayload) => void) {
