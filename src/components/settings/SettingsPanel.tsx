@@ -76,6 +76,26 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
           />
           <p className="text-xs text-text-muted">Current scale: {settings.resolution}</p>
         </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-text-secondary">Create PDF</label>
+          <input
+            type="checkbox"
+            checked={settings.createPdf}
+            onChange={(e) => update("createPdf", e.target.checked)}
+            className="accent-accent h-4 w-4"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-text-secondary">Save metadata.json</label>
+          <input
+            type="checkbox"
+            checked={settings.saveMetadata}
+            onChange={(e) => update("saveMetadata", e.target.checked)}
+            className="accent-accent h-4 w-4"
+          />
+        </div>
       </div>
     </div>
   );

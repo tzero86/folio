@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { BookOpen, FileText, Trash2 } from "lucide-react";
+import { BookOpen, FileText, Trash2, FolderOpen } from "lucide-react";
 import { Button } from "../ui/Button";
 import { listLibraryBooks, deleteLibraryBook } from "../../lib/tauri";
+import { open } from "@tauri-apps/plugin-shell";
 import type { LibraryBook } from "../../lib/tauri";
 
 export function LibraryPanel() {
@@ -51,8 +52,8 @@ export function LibraryPanel() {
         {books.map((book) => (
           <div key={book.id} className="flex gap-3 rounded-xl border border-border bg-bg-secondary p-3">
             <div className="h-20 w-16 shrink-0 overflow-hidden rounded-md bg-bg-elevated">
-              {book.cover_path ? (
-                <img src={book.cover_path} alt={book.title} className="h-full w-full object-cover" />
+              {book.cover_url ? (
+                <img src={book.cover_url} alt={book.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-text-muted">
                   <FileText size={20} />
@@ -67,7 +68,16 @@ export function LibraryPanel() {
                 {book.pages && <span>{book.pages} pages</span>}
               </div>
               <div className="mt-2 flex gap-1">
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleDelete(book.identifier)}>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => open(book.pdf_path)} title="Open PDF">
+                  <FileText size={12} />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
+                  const path = book.pdf_path.substring(0, book.pdf_path.lastIndexOf("\\"));
+                  if (path) open(path);
+                }} title="Open file location">
+                  <FolderOpen size={12} />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleDelete(book.identifier)} title="Remove from library">
                   <Trash2 size={12} />
                 </Button>
               </div>

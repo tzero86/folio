@@ -11,7 +11,7 @@ pub struct LibraryBook {
     pub year: Option<String>,
     pub pages: Option<i64>,
     pub pdf_path: String,
-    pub cover_path: Option<String>,
+    pub cover_url: Option<String>,
     pub downloaded_at: String,
 }
 
@@ -25,7 +25,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
             year TEXT,
             pages INTEGER,
             pdf_path TEXT NOT NULL,
-            cover_path TEXT,
+            cover_url TEXT,
             downloaded_at TEXT NOT NULL
         )"
     ).execute(pool).await?;
@@ -34,7 +34,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<()> {
 
 pub async fn add_book(pool: &SqlitePool, book: &LibraryBook) -> Result<()> {
     sqlx::query(
-        "INSERT OR REPLACE INTO books (id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT OR REPLACE INTO books (id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&book.id)
     .bind(&book.identifier)
@@ -43,7 +43,7 @@ pub async fn add_book(pool: &SqlitePool, book: &LibraryBook) -> Result<()> {
     .bind(&book.year)
     .bind(&book.pages)
     .bind(&book.pdf_path)
-    .bind(&book.cover_path)
+    .bind(&book.cover_url)
     .bind(&book.downloaded_at)
     .execute(pool)
     .await?;
@@ -52,13 +52,13 @@ pub async fn add_book(pool: &SqlitePool, book: &LibraryBook) -> Result<()> {
 
 pub async fn list_books(pool: &SqlitePool) -> Result<Vec<LibraryBook>> {
     let books = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, String)>(
-        "SELECT id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at FROM books ORDER BY downloaded_at DESC"
+        "SELECT id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at FROM books ORDER BY downloaded_at DESC"
     )
     .fetch_all(pool)
     .await?
     .into_iter()
-    .map(|(id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at)| LibraryBook {
-        id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at,
+    .map(|(id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at)| LibraryBook {
+        id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at,
     })
     .collect();
     Ok(books)
@@ -66,13 +66,13 @@ pub async fn list_books(pool: &SqlitePool) -> Result<Vec<LibraryBook>> {
 
 pub async fn find_book(pool: &SqlitePool, identifier: &str) -> Result<Option<LibraryBook>> {
     let result = sqlx::query_as::<_, (String, String, String, Option<String>, Option<String>, Option<i64>, String, Option<String>, String)>(
-        "SELECT id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at FROM books WHERE identifier = ?"
+        "SELECT id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at FROM books WHERE identifier = ?"
     )
     .bind(identifier)
     .fetch_optional(pool)
     .await?;
-    Ok(result.map(|(id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at)| LibraryBook {
-        id, identifier, title, creator, year, pages, pdf_path, cover_path, downloaded_at,
+    Ok(result.map(|(id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at)| LibraryBook {
+        id, identifier, title, creator, year, pages, pdf_path, cover_url, downloaded_at,
     }))
 }
 

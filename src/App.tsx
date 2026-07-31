@@ -49,6 +49,7 @@ export default function App() {
     resolution: 2,
     createPdf: true,
     saveCredentials: false,
+    saveMetadata: false,
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -158,6 +159,9 @@ export default function App() {
           const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           return { ...item, status: "downloading", progress };
         }
+        if (payload.status === "assembling") {
+          return { ...item, status: "downloading", progress: 100 };
+        }
         if (payload.status === "done") {
           addToast("success", "Download complete", payload.pdf ?? "PDF saved");
           const doneItem = prev.find((i) => i.metadata?.identifier === payload.id);
@@ -170,7 +174,7 @@ export default function App() {
               year: doneItem.metadata.date?.slice(0, 4) ?? null,
               pages: doneItem.metadata.image_count ?? null,
               pdf_path: payload.pdf ?? "",
-              cover_path: null,
+              cover_url: `https://archive.org/download/${payload.id}/__ia_thumb.jpg`,
               downloaded_at: new Date().toISOString(),
             }).catch((e) => addLog("error", "Failed to save to library", String(e)));
           }

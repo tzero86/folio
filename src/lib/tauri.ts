@@ -23,6 +23,7 @@ export async function downloadBooks(settings: AppSettings, identifiers: string[]
       resolution: settings.resolution,
       create_pdf: settings.createPdf,
       save_credentials: settings.saveCredentials,
+      save_metadata: settings.saveMetadata,
     },
   });
 }
@@ -40,7 +41,7 @@ export interface LibraryBook {
   year: string | null;
   pages: number | null;
   pdf_path: string;
-  cover_path: string | null;
+  cover_url: string | null;
   downloaded_at: string;
 }
 

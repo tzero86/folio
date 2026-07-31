@@ -27,4 +27,5 @@ export interface AppSettings {
   resolution: number;
   createPdf: boolean;
   saveCredentials: boolean;
+  saveMetadata: boolean;
 }

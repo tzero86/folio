@@ -12,6 +12,7 @@ pub struct DownloadRequest {
     pub resolution: i32,
     pub create_pdf: bool,
     pub save_credentials: bool,
+    pub save_metadata: bool,
 }
 
 #[command]
@@ -36,6 +37,7 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
         let out = output_dir.clone();
         let resolution = request.resolution;
         let create_pdf = request.create_pdf;
+        let save_metadata = request.save_metadata;
         let id_clone = id.clone();
 
         tauri::async_runtime::spawn(async move {
@@ -45,6 +47,7 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
                 &out,
                 resolution,
                 create_pdf,
+                save_metadata,
                 |status, detail| {
                     let mut payload = serde_json::json!({
                         "id": id_clone,
