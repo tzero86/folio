@@ -6,36 +6,89 @@ use anyhow::{Context, Result};
 use image_crate::GenericImageView;
 use printpdf::*;
 
+fn jpeg_dimensions_and_components(data: &[u8]) -> Option<((u32, u32), u8)> {
+    let mut i = 0;
+    while i + 1 < data.len() {
+        if data[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+        if i + 2 > data.len() {
+            return None;
+        }
+        let marker = data[i + 1];
+        // 0xFF00 is an escaped 0xFF byte inside entropy data; 0xFFFF is padding.
+        if marker == 0x00 || marker == 0xFF {
+            i += 2;
+            continue;
+        }
+        // Standalone markers: SOI, EOI, RSTm, TEM
+        if marker == 0xD8 || marker == 0xD9 || (0xD0..=0xD7).contains(&marker) || marker == 0x01 {
+            i += 2;
+            continue;
+        }
+        // APPn and COM segments have a length word
+        if (0xE0..=0xEF).contains(&marker) || marker == 0xFE {
+            if i + 3 >= data.len() {
+                return None;
+            }
+            let len = u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize;
+            i += 2 + len;
+            continue;
+        }
+        // SOFn markers carry the image dimensions and component count
+        if (0xC0..=0xCF).contains(&marker) && marker != 0xC4 && marker != 0xC8 && marker != 0xCC {
+            if i + 9 >= data.len() {
+                return None;
+            }
+            let height = u16::from_be_bytes([data[i + 5], data[i + 6]]) as u32;
+            let width = u16::from_be_bytes([data[i + 7], data[i + 8]]) as u32;
+            let components = data[i + 9];
+            return Some(((width, height), components));
+        }
+        // All other markers (DHT, DQT, etc.) have a length word
+        if i + 3 >= data.len() {
+            return None;
+        }
+        let len = u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize;
+        i += 2 + len;
+    }
+    None
+}
+
 fn image_xobject_from_path(path: &Path) -> Result<ImageXObject> {
     let bytes = fs::read(path)
         .with_context(|| format!("reading image {}", path.display()))?;
 
-    let img = image_crate::open(path)
-        .with_context(|| format!("opening image {}", path.display()))?;
-    let (width, height) = img.dimensions();
-    let color_type = img.color();
-
-    let (color_space, bits) = match color_type {
-        image_crate::ColorType::L8 | image_crate::ColorType::L16 => (ColorSpace::Greyscale, ColorBits::Bit8),
-        image_crate::ColorType::Rgb8
-        | image_crate::ColorType::Rgb16
-        | image_crate::ColorType::Rgba8
-        | image_crate::ColorType::Rgba16 => (ColorSpace::Rgb, ColorBits::Bit8),
-        _ => (ColorSpace::Rgb, ColorBits::Bit8),
+    let ((width, height), components) = match jpeg_dimensions_and_components(&bytes) {
+        Some(v) => v,
+        None => {
+            let img = image_crate::open(path)
+                .with_context(|| format!("fallback open for {}", path.display()))?;
+            let (w, h) = img.dimensions();
+            let components = match img.color() {
+                image_crate::ColorType::L8 | image_crate::ColorType::L16 => 1,
+                _ => 3,
+            };
+            ((w, h), components)
+        }
     };
 
-    let is_jpeg = image_crate::io::Reader::open(path)?
-        .with_guessed_format()?
-        .format()
-        == Some(image_crate::ImageFormat::Jpeg);
+    let color_space = if components == 1 {
+        ColorSpace::Greyscale
+    } else if components == 4 {
+        ColorSpace::Cmyk
+    } else {
+        ColorSpace::Rgb
+    };
 
     Ok(ImageXObject {
         width: Px(width as usize),
         height: Px(height as usize),
         color_space,
-        bits_per_component: bits,
+        bits_per_component: ColorBits::Bit8,
         image_data: bytes,
-        image_filter: if is_jpeg { Some(ImageFilter::DCT) } else { None },
+        image_filter: Some(ImageFilter::DCT),
         interpolate: false,
         smask: None,
         clipping_bbox: None,
