@@ -65,12 +65,18 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
           )}
         </div>
 
-        {item.status === "downloading" && (
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-bg-elevated">
-            <div
-              className="h-full rounded-full bg-accent transition-all"
-              style={{ width: `${item.progress}%` }}
-            />
+        {(item.status === "downloading" || item.status === "started") && (
+          <div className="mt-3">
+            <div className="mb-1 flex justify-between text-[10px] text-text-muted">
+              <span>{item.status === "started" ? "Starting..." : "Downloading..."}</span>
+              <span>{item.progress}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-elevated">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-300"
+                style={{ width: `${item.progress}%` }}
+              />
+            </div>
           </div>
         )}
 

@@ -142,14 +142,15 @@ export default function App() {
   );
 
   const handleStatus = useCallback((payload: { id: string; status: string; pdf?: string; message?: string; current?: string; total?: string }) => {
-    addLog("debug", `Status \${payload.status} for \${payload.id}`, JSON.stringify(payload));
+    addLog("debug", `Status ${payload.status} for ${payload.id}`, JSON.stringify(payload));
     setItems((prev) => {
       return prev.map((item) => {
         if (item.metadata?.identifier !== payload.id) return item;
         if (payload.status === "started") return { ...item, status: "started", progress: 0 };
         if (payload.status === "downloading") {
           const current = payload.current ? parseInt(payload.current, 10) : 0;
-          const total = payload.total ? parseInt(payload.total.split(":").pop() || payload.total, 10) : 0;
+          const totalParts = payload.total?.split(":");
+          const total = totalParts ? parseInt(totalParts[0], 10) : 0;
           const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           return { ...item, status: "downloading", progress };
         }
@@ -164,7 +165,7 @@ export default function App() {
         return item;
       });
     });
-  }, [addLog]);
+  }, [addLog, addToast]);
 
   useEffect(() => {
     const unlisten = onDownloadStatus(handleStatus);

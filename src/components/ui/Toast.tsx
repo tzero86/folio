@@ -25,9 +25,9 @@ const icons = {
 };
 
 const colors = {
-  success: "border-success/30 bg-success/10 text-success",
-  error: "border-danger/30 bg-danger/10 text-danger",
-  info: "border-accent/30 bg-accent-subtle text-accent",
+  success: "border-success/40 bg-success/15 text-success",
+  error: "border-danger/40 bg-danger/15 text-danger",
+  info: "border-accent/40 bg-accent-subtle text-accent",
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
@@ -43,7 +43,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       initial={{ opacity: 0, x: 24, scale: 0.96 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 24, scale: 0.96 }}
-      className={cn("pointer-events-auto mb-3 flex w-80 items-start gap-3 rounded-lg border p-4 shadow-lg backdrop-blur", colors[toast.type])}
+      className={cn("pointer-events-auto mb-3 flex w-80 items-start gap-3 rounded-lg border p-4 shadow-xl backdrop-blur", colors[toast.type])}
     >
       <Icon size={20} className="mt-0.5 shrink-0" />
       <div className="flex-1">
