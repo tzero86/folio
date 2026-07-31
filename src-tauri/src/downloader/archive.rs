@@ -70,11 +70,30 @@ pub async fn loan_book(client: &reqwest::Client, book_id: &str) -> Result<()> {
 
     let mut browse = grant.clone();
     browse["action"] = "browse_book".into();
-    client
+    let browse_resp = client
         .post("https://archive.org/services/loans/loan/")
         .form(&browse)
         .send()
         .await?;
+    let status = browse_resp.status();
+    let browse_text = browse_resp.text().await?;
+
+    // Public-domain / unrestricted books respond with a 400 saying the book
+    // cannot be borrowed - that means no token is needed and we can proceed.
+    if status == reqwest::StatusCode::BAD_REQUEST {
+        let is_free_book = serde_json::from_str::<serde_json::Value>(&browse_text)
+            .ok()
+            .and_then(|v| v["error"].as_str().map(|s| s.to_string()))
+            == Some("This book is not available to borrow at this time. Please try again later.".to_string());
+        if is_free_book {
+            info!("book {} does not need to be borrowed", book_id);
+            return Ok(());
+        }
+        anyhow::bail!("loan failed: {}", browse_text);
+    }
+    if !status.is_success() {
+        anyhow::bail!("loan failed: HTTP {status}: {browse_text}");
+    }
 
     let mut token_req = browse.clone();
     token_req["action"] = "create_token".into();

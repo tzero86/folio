@@ -186,8 +186,10 @@ export default function App() {
           return { ...item, status: "done", pdfPath: payload.pdf, progress: 100 };
         }
         if (payload.status === "error") {
-          addToast("error", "Download failed", payload.message ?? "Failed");
-          return { ...item, status: "error", error: payload.message ?? "Failed" };
+          const msg = payload.message ?? "Failed";
+          addLog("error", `Download failed for ${payload.id}`, msg);
+          addToast("error", "Download failed", msg);
+          return { ...item, status: "error", error: msg };
         }
         return item;
       });
