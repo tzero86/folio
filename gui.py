@@ -133,25 +133,104 @@ class StatusBadge(ctk.CTkLabel):
         self.configure(text=status.upper(), fg_color=bg, text_color=fg)
 
 
+from packaging import version
+
+VERSION = "1.2.0"
+REPO_OWNER = "MiniGlome"
+REPO_NAME = "Archive.org-Downloader"
+
+
+def fetch_book_metadata(book_id: str) -> dict:
+    """Fetch public metadata from Archive.org without login."""
+    try:
+        return archive_org_downloader.fetch_book_metadata(book_id)
+    except Exception:
+        return {}
+
+
+def safe_list(value):
+    """Return a list if value is a list, otherwise a single-item list."""
+    if isinstance(value, list):
+        return value
+    return [value] if value is not None else []
+
+
+def format_meta_field(meta: dict, key: str) -> str:
+    """Extract a single string metadata field, joining lists with semicolons."""
+    if key not in meta:
+        return ""
+    value = meta[key]
+    if isinstance(value, list):
+        value = "; ".join(str(v) for v in value)
+    return str(value).strip()
+
+
+def first_year(date_str: str) -> str:
+    """Pull the first 4-digit year from a date string."""
+    if not date_str:
+        return ""
+    import re
+    match = re.search(r'\d{4}', str(date_str))
+    return match.group(0) if match else ""
+
+
+def _open_path(path: str):
+    """Open a file or folder with the system's default handler."""
+    if not path or not os.path.exists(path):
+        return
+    if sys.platform == "win32":
+        os.startfile(path)
+    elif sys.platform == "darwin":
+        os.system(f'open "{path}"')
+    else:
+        os.system(f'xdg-open "{path}"')
+
+
+def check_for_update() -> tuple[str, str] | None:
+    """Check GitHub releases for a newer version. Return (latest_version, release_url) or None."""
+    try:
+        url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+        response = requests.get(url, timeout=8, headers={"Accept": "application/vnd.github+json"})
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        latest = data.get("tag_name", "").lstrip("v")
+        html_url = data.get("html_url", f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases")
+        if not latest:
+            return None
+        if version.parse(latest) > version.parse(VERSION):
+            return (latest, html_url)
+    except Exception:
+        pass
+    return None
+
+
 class ItemCard(ctk.CTkFrame):
     def __init__(self, master, url: str, remove_callback, **kwargs):
         super().__init__(master, fg_color=COLORS['bg_secondary'], corner_radius=8, border_width=1, border_color=COLORS['border'], **kwargs)
         self.pack(fill="x", pady=4, padx=4)
         self.url = url
         self.book_id = book_id_from_url(url)
+        self.pdf_path: str | None = None
+        self._meta: dict = {}
 
         # Thumbnail
-        self.thumb_label = ctk.CTkLabel(self, text="", image=make_placeholder(), width=64, height=80, fg_color=COLORS['bg_elevated'], corner_radius=6)
+        self.thumb_label = ctk.CTkLabel(self, text="", image=make_placeholder(), width=64, height=80, fg_color=COLORS['bg_elevated'], corner_radius=6, cursor="hand2")
         self.thumb_label.pack(side="left", padx=(10, 12), pady=10)
+        self.thumb_label.bind("<Button-1>", lambda e: self._open_destination())
 
         # Info
         info_frame = ctk.CTkFrame(self, fg_color="transparent")
         info_frame.pack(side="left", fill="both", expand=True, pady=10)
 
-        self.title_label = ctk.CTkLabel(info_frame, text=self.book_id, anchor="w", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS['text_primary'])
+        self.title_label = ctk.CTkLabel(info_frame, text=self.book_id, anchor="w", font=ctk.CTkFont(size=14, weight="bold"), text_color=COLORS['text_primary'], cursor="hand2")
         self.title_label.pack(fill="x")
+        self.title_label.bind("<Button-1>", lambda e: self._open_destination())
 
-        self.url_label = ctk.CTkLabel(info_frame, text=url, anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS['text_muted'])
+        self.meta_label = ctk.CTkLabel(info_frame, text="", anchor="w", font=ctk.CTkFont(size=11), text_color=COLORS['text_secondary'])
+        self.meta_label.pack(fill="x")
+
+        self.url_label = ctk.CTkLabel(info_frame, text=url, anchor="w", font=ctk.CTkFont(size=10), text_color=COLORS['text_muted'])
         self.url_label.pack(fill="x")
 
         self.status_badge = StatusBadge(info_frame)
@@ -161,16 +240,42 @@ class ItemCard(ctk.CTkFrame):
         self.remove_btn = IconButton(self, "×", command=lambda: remove_callback(self), size=32, hover_color=COLORS['danger_hover'], text_color=COLORS['text_secondary'])
         self.remove_btn.pack(side="right", padx=10, pady=10)
 
-        # Load thumbnail asynchronously
-        self.after(50, self._load_thumbnail)
+        # Load metadata + thumbnail asynchronously
+        self.after(50, self._load_metadata)
+        self.after(100, self._load_thumbnail)
+
+    def _load_metadata(self):
+        self._meta = fetch_book_metadata(self.book_id)
+        title = format_meta_field(self._meta, 'title') or self.book_id
+        creator = format_meta_field(self._meta, 'creator')
+        year = first_year(format_meta_field(self._meta, 'date'))
+        pages = format_meta_field(self._meta, 'image_count')
+
+        self.title_label.configure(text=title)
+        meta_parts = [p for p in [creator, year, f"{pages} pages" if pages else ""] if p]
+        self.meta_label.configure(text=" · ".join(meta_parts))
 
     def _load_thumbnail(self):
         thumb = fetch_thumbnail(self.book_id)
         if thumb:
             self.thumb_label.configure(image=thumb)
 
-    def set_status(self, status: str):
+    def set_status(self, status: str, pdf_path: str | None = None):
         self.status_badge.set_status(status)
+        if pdf_path:
+            self.pdf_path = pdf_path
+        if status == 'done' and self.pdf_path and os.path.exists(self.pdf_path):
+            self.status_badge.configure(cursor="hand2")
+
+    def _open_destination(self):
+        if self.pdf_path and os.path.exists(self.pdf_path):
+            _open_path(self.pdf_path)
+        else:
+            out_dir = self.winfo_toplevel().dir_entry.get() or os.getcwd()
+            if os.path.isdir(out_dir):
+                _open_path(out_dir)
+            else:
+                _open_path(os.getcwd())
 
 class StdoutRedirector:
     def __init__(self, queue):
@@ -207,8 +312,19 @@ class App(ctk.CTk):
         self.header_frame.pack(fill="x", padx=20, pady=(20, 16))
         ctk.CTkLabel(self.header_frame, text="Archive.org", font=ctk.CTkFont(size=20, weight="bold"), text_color=COLORS['text_primary']).pack(side="left")
         ctk.CTkLabel(self.header_frame, text="Downloader", font=ctk.CTkFont(size=20, weight="normal"), text_color=COLORS['text_secondary']).pack(side="left", padx=(4, 0))
+
+        self._update_banner = ctk.CTkFrame(self.header_frame, fg_color=COLORS['bg_elevated'], corner_radius=6, border_width=1, border_color=COLORS['border'])
+        self._update_label = ctk.CTkLabel(self._update_banner, text="", font=ctk.CTkFont(size=11), text_color=COLORS['accent'])
+        self._update_label.pack(side="left", padx=(8, 4), pady=4)
+        self._update_btn = ctk.CTkButton(self._update_banner, text="Get Update", width=80, height=24, fg_color=COLORS['accent'], hover_color=COLORS['accent_hover'], text_color=COLORS['bg_primary'], font=ctk.CTkFont(size=11, weight="bold"), command=self._open_update_page)
+        self._update_btn.pack(side="right", padx=4, pady=4)
+        self._update_banner.pack_forget()
+
         self.about_btn = IconButton(self.header_frame, "?", command=self.open_about, size=32)
         self.about_btn.pack(side="right")
+
+        # Start background update check
+        self.after(1000, self._check_update)
 
         # Add item input
         self.input_frame = ctk.CTkFrame(self.sidebar, fg_color=COLORS['bg_elevated'], corner_radius=8, border_width=1, border_color=COLORS['border'])
@@ -336,6 +452,28 @@ class App(ctk.CTk):
         self._output_queue = queue.Queue()
         self._running_thread = None
         self._settings_expanded = True
+
+    def _check_update(self):
+        def run_check():
+            result = check_for_update()
+            if result:
+                latest, url = result
+                self._latest_url = url
+                self.after(0, lambda: self._show_update_banner(latest))
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _show_update_banner(self, latest_version: str):
+        self._update_label.configure(text=f"v{latest_version} available")
+        self._update_banner.pack(side="right", padx=(0, 12), pady=4)
+
+    def _open_update_page(self):
+        url = getattr(self, '_latest_url', f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases")
+        if sys.platform == "win32":
+            os.startfile(url)
+        elif sys.platform == "darwin":
+            os.system(f'open "{url}"')
+        else:
+            os.system(f'xdg-open "{url}"')
 
     def toggle_settings(self):
         if self._settings_expanded:
@@ -472,8 +610,8 @@ class App(ctk.CTk):
     def _update_card_status(self, book_id: str, status: str, message: str = ""):
         for card in self.items_list:
             if card.book_id == book_id:
-                card.set_status(status)
-                if status == 'error' and message:
+                card.set_status(status, message if status == 'done' and message else None)
+                if status == 'error' and message and not message.endswith('.pdf'):
                     self.print_output(f"[{book_id}] {message}\n")
                 break
 

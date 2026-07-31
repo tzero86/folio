@@ -251,6 +251,18 @@ def download(session, n_threads, directory, links, scale, book_id):
 
     return images
 
+def fetch_book_metadata(book_id: str) -> dict:
+    """Fetch public metadata for a book without requiring login."""
+    session = requests.Session()
+    url = f"https://archive.org/details/{book_id}"
+    try:
+        r = session.get(url).text
+        infos_url = "https:" + r.split('"url":"')[1].split('"')[0].replace("\\u0026", "&")
+        response = session.get(infos_url)
+        return response.json()['data']['metadata']
+    except Exception:
+        return {}
+
 def make_pdf(pdf, title, directory):
 	file = title+".pdf"
 	# Handle the case where multiple books with the same name are downloaded
@@ -262,6 +274,7 @@ def make_pdf(pdf, title, directory):
 	with open(os.path.join(directory, file),"wb") as f:
 		f.write(pdf)
 	print(f"[+] PDF saved as \"{file}\"")
+	return file
 
 
 def process_downloads(email, password, urls, output_dir, resolution=3, threads=50, jpg_output=False, meta_output=False, status_callback=None):
@@ -335,26 +348,26 @@ def process_downloads(email, password, urls, output_dir, resolution=3, threads=5
                     pdfmeta['author'] = metadata['associated-names']
                 if 'date' in metadata:
                     try:
-                        naive = datetime.strptime(metadata['date'][0:4], '%Y')
-                        # img2pdf's datetime_to_pdfdate calls astimezone(utc);
-                        # naive datetimes on Windows can raise OSError [Errno 22].
-                        pdfmeta['creationdate'] = naive.replace(tzinfo=timezone.utc)
+                        pdfmeta['creationdate'] = datetime.strptime(metadata['date'][0:4], '%Y').replace(tzinfo=timezone.utc)
                     except Exception:
                         pass
                 pdfmeta['keywords'] = [canonical_url]
 
+                pdf_file = None
                 if images:
                     pdf = img2pdf.convert(images, **pdfmeta)
-                    make_pdf(pdf, title, output_dir)
+                    pdf_file = make_pdf(pdf, title, output_dir)
                     try:
                         shutil.rmtree(directory)
                     except OSError as e:
                         print("Error: %s - %s." % (e.filename, e.strerror))
                 else:
                     print("No images downloaded, skipping PDF creation.")
+            else:
+                pdf_file = None
 
             if status_callback:
-                status_callback(book_id, 'done')
+                status_callback(book_id, 'done', pdf_file or "")
 
             return_loan(session, book_id)
         except Exception as e:
