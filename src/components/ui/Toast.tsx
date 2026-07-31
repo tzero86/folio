@@ -25,9 +25,9 @@ const icons = {
 };
 
 const colors = {
-  success: "border-success/40 bg-success/15 text-success",
-  error: "border-danger/40 bg-danger/15 text-danger",
-  info: "border-accent/40 bg-accent-subtle text-accent",
+  success: "border-success/30 bg-success/10 text-white",
+  error: "border-danger/30 bg-danger/10 text-white",
+  info: "border-accent/30 bg-accent/10 text-white",
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {

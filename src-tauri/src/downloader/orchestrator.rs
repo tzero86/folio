@@ -31,8 +31,7 @@ where
             .await
             .with_context(|| format!("downloading page {}", i + 1))?;
         image_paths.push(path);
-        let progress = ((i + 1) as f64 / links.len() as f64 * 100.0) as u32;
-        let detail = format!("{}/{}:{}", i + 1, links.len(), progress);
+        let detail = format!("{}:{}", i + 1, links.len());
         emit_status("downloading", Some(&detail));
     }
 

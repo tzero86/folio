@@ -30,3 +30,32 @@ export async function downloadBooks(settings: AppSettings, identifiers: string[]
 export function onDownloadStatus(callback: (payload: DownloadStatusPayload) => void) {
   return listen<DownloadStatusPayload>("download-status", (event) => callback(event.payload));
 }
+
+
+export interface LibraryBook {
+  id: string;
+  identifier: string;
+  title: string;
+  creator: string | null;
+  year: string | null;
+  pages: number | null;
+  pdf_path: string;
+  cover_path: string | null;
+  downloaded_at: string;
+}
+
+export async function addLibraryBook(book: LibraryBook): Promise<void> {
+  return invoke("add_library_book", { book });
+}
+
+export async function listLibraryBooks(): Promise<LibraryBook[]> {
+  return invoke("list_library_books");
+}
+
+export async function findLibraryBook(identifier: string): Promise<LibraryBook | null> {
+  return invoke("find_library_book", { identifier });
+}
+
+export async function deleteLibraryBook(identifier: string): Promise<void> {
+  return invoke("delete_library_book", { identifier });
+}

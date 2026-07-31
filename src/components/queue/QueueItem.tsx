@@ -33,7 +33,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
           <img
             src={coverUrl}
             alt={meta?.title ?? "Book cover"}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain bg-bg-elevated"
             loading="lazy"
           />
         ) : (

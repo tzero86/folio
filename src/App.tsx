@@ -13,7 +13,7 @@ import { AboutDialog } from "./components/about/AboutDialog";
 import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { ToastContainer, useToast } from "./components/ui/Toast";
-import { fetchBookMetadata, onDownloadStatus, downloadBooks } from "./lib/tauri";
+import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
 import type { QueueItem, AppSettings } from "./types";
@@ -76,6 +76,11 @@ export default function App() {
         prev.map((item) => (item.id === id ? { ...item, metadata, status: "pending" } : item))
       );
       addToast("info", "Book added", metadata.title ?? identifier);
+      // Check if already downloaded
+      const existing = await findLibraryBook(identifier);
+      if (existing) {
+        addToast("info", "Already downloaded", `${metadata.title ?? identifier} was downloaded before. Redownload if needed.`);
+      }
     } catch (e) {
       const err = String(e);
       addLog("error", `Metadata fetch failed for ${identifier}`, err);
@@ -149,13 +154,26 @@ export default function App() {
         if (payload.status === "started") return { ...item, status: "started", progress: 0 };
         if (payload.status === "downloading") {
           const current = payload.current ? parseInt(payload.current, 10) : 0;
-          const totalParts = payload.total?.split(":");
-          const total = totalParts ? parseInt(totalParts[0], 10) : 0;
+          const total = payload.total ? parseInt(payload.total, 10) : 0;
           const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           return { ...item, status: "downloading", progress };
         }
         if (payload.status === "done") {
           addToast("success", "Download complete", payload.pdf ?? "PDF saved");
+          const doneItem = prev.find((i) => i.metadata?.identifier === payload.id);
+          if (doneItem?.metadata) {
+            addLibraryBook({
+              id: crypto.randomUUID(),
+              identifier: payload.id,
+              title: doneItem.metadata.title ?? payload.id,
+              creator: doneItem.metadata.creator?.join("; ") ?? null,
+              year: doneItem.metadata.date?.slice(0, 4) ?? null,
+              pages: doneItem.metadata.image_count ?? null,
+              pdf_path: payload.pdf ?? "",
+              cover_path: null,
+              downloaded_at: new Date().toISOString(),
+            }).catch((e) => addLog("error", "Failed to save to library", String(e)));
+          }
           return { ...item, status: "done", pdfPath: payload.pdf, progress: 100 };
         }
         if (payload.status === "error") {
