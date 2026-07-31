@@ -5,8 +5,10 @@ import sys
 import threading
 import queue
 import re
+import io
 from tkinter import filedialog, messagebox
 
+import requests
 import archive_org_downloader
 from PIL import Image
 
@@ -17,6 +19,48 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+
+def book_id_from_url(url: str) -> str:
+    """Extract the Archive.org identifier from a /details/ URL."""
+    url = url.rstrip('/')
+    parts = url.split('/')
+    if len(parts) >= 5 and parts[2] == 'archive.org' and parts[3] == 'details':
+        return parts[4]
+    raise ValueError(f"Cannot extract book id from URL: {url}")
+
+
+_THUMBNAIL_CACHE: dict[str, ctk.CTkImage | None] = {}
+_PLACEHOLDER_SIZE = (64, 80)
+
+
+def fetch_thumbnail(book_id: str, size: tuple[int, int] = _PLACEHOLDER_SIZE) -> ctk.CTkImage | None:
+    """Fetch and cache a 64x80 cover thumbnail from Archive.org."""
+    if book_id in _THUMBNAIL_CACHE:
+        return _THUMBNAIL_CACHE[book_id]
+
+    url = f"https://archive.org/download/{book_id}/__ia_thumb.jpg"
+    try:
+        response = requests.get(url, timeout=8)
+        if response.status_code != 200:
+            _THUMBNAIL_CACHE[book_id] = None
+            return None
+        image = Image.open(io.BytesIO(response.content))
+        image = image.convert('RGB')
+        image.thumbnail(size, Image.Resampling.LANCZOS)
+        ctk_image = ctk.CTkImage(image, size=image.size)
+        _THUMBNAIL_CACHE[book_id] = ctk_image
+        return ctk_image
+    except Exception:
+        _THUMBNAIL_CACHE[book_id] = None
+        return None
+
+
+def make_placeholder(size: tuple[int, int] = _PLACEHOLDER_SIZE, color: str = "#2c2f38") -> ctk.CTkImage:
+    """Return a simple colored rectangle placeholder."""
+    image = Image.new('RGB', size, color)
+    return ctk.CTkImage(image, size=size)
+
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
