@@ -42,8 +42,10 @@ def get_book_infos(session, url):
 		raise Exception("Error while getting image links")
 
 def book_id_from_url(url: str) -> str:
-	"""Extract the Archive.org identifier from a /details/ URL."""
+	"""Extract the Archive.org identifier from a /details/ URL or return a raw ID."""
 	url = url.rstrip('/')
+	if not url.startswith("http"):
+		return url
 	parts = url.split('/')
 	if len(parts) >= 5 and parts[2] == 'archive.org' and parts[3] == 'details':
 		return parts[4]
