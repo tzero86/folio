@@ -159,8 +159,45 @@ fn extract_info_url(body: &str) -> Result<String> {
     Ok(format!("https:{}", url.replace("\\u0026", "&")))
 }
 
-pub async fn search_books(req: &crate::commands::search::SearchRequest) -> Result<crate::commands::search::SearchResponse> {
-    let mut parts: Vec<String> = vec!["mediatype:texts".to_string()];
+/// Pick the native PDF filename for an item: prefer the `original` metadata
+/// field when it's a PDF, otherwise scan the file list for a `.pdf`.
+pub fn pick_pdf_filename(original: Option<&str>, file_names: &[String]) -> Option<String> {
+    if let Some(name) = original.filter(|n| n.to_lowercase().ends_with(".pdf")) {
+        return Some(name.to_string());
+    }
+    file_names
+        .iter()
+        .find(|n| n.to_lowercase().ends_with(".pdf"))
+        .cloned()
+}
+
+/// Find the original (native) PDF for an item, if it has one.
+pub async fn find_original_pdf(client: &reqwest::Client, identifier: &str) -> Result<Option<String>> {
+    let resp: serde_json::Value = client
+        .get(format!("https://archive.org/metadata/{identifier}"))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let original = resp
+        .get("metadata")
+        .and_then(|m| m.get("original"))
+        .and_then(|v| v.as_str());
+    let file_names: Vec<String> = resp
+        .get("files")
+        .and_then(|f| f.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|f| f.get("name").and_then(|n| n.as_str()).map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(pick_pdf_filename(original, &file_names))
+}
+
+pub async fn search_books(req: &crate::commands::search::SearchRequest) -> Result<crate::commands::search::SearchResponse> {    let mut parts: Vec<String> = vec!["mediatype:texts".to_string()];
     let trimmed = req.query.trim();
     if !trimmed.is_empty() {
         parts.push(format!("({trimmed})"));
@@ -317,4 +354,41 @@ fn parse_metadata(data: &serde_json::Value, identifier: &str) -> Result<BookMeta
         language,
         image_count,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick_pdf_filename;
+
+    #[test]
+    fn picks_original_pdf_when_it_is_a_pdf() {
+        let files = vec!["item_jp2.zip".to_string(), "item.pdf".to_string()];
+        assert_eq!(
+            pick_pdf_filename(Some("item.pdf"), &files),
+            Some("item.pdf".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_original_when_not_a_pdf() {
+        let files = vec!["item_jp2.zip".to_string(), "item.pdf".to_string()];
+        // original can point at the source upload (e.g. a .doc) - fall back to scanning
+        assert_eq!(
+            pick_pdf_filename(Some("item.doc"), &files),
+            Some("item.pdf".to_string())
+        );
+    }
+
+    #[test]
+    fn scans_file_list_case_insensitively() {
+        let files = vec!["SCAN.PDF".to_string(), "other.txt".to_string()];
+        assert_eq!(pick_pdf_filename(None, &files), Some("SCAN.PDF".to_string()));
+    }
+
+    #[test]
+    fn returns_none_when_no_pdf_exists() {
+        let files = vec!["item_jp2.zip".to_string(), "item_djvu.txt".to_string()];
+        assert_eq!(pick_pdf_filename(None, &files), None);
+        assert_eq!(pick_pdf_filename(Some("item.doc"), &files), None);
+    }
 }

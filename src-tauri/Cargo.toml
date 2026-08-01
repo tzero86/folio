@@ -1,6 +1,6 @@
 [package]
 name = "folio"
-version = "0.1.0"
+version = "0.2.0"
 description = "Folio - Archive.org book downloader and library"
 authors = ["Elias Medina"]
 edition = "2021"
@@ -21,7 +21,7 @@ tauri-plugin-store = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "native-tls", "system-proxy"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "native-tls", "system-proxy", "stream"] }
 scraper = "0.22"
 aes = "0.8"
 cipher = { version = "0.4", features = ["std"] }
@@ -42,6 +42,7 @@ regex = "1"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-notification = "2.3.3"
+futures-util = "0.3.33"
 
 [features]
 default = ["custom-protocol"]
