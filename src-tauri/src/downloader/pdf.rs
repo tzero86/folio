@@ -136,3 +136,52 @@ pub fn images_to_pdf(image_paths: &[std::path::PathBuf], output: &Path, title: &
         .with_context(|| format!("saving PDF to {}", output.display()))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::jpeg_dimensions_and_components;
+
+    #[test]
+    fn parses_sof_dimensions_and_components() {
+        let mut b = vec![0xFF, 0xD8]; // SOI
+        // APP0 (len 16)
+        b.extend_from_slice(&[
+            0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01,
+            0x00, 0x00,
+        ]);
+        // SOF0 (len 17): precision 8, height 4, width 3, 3 components
+        b.extend_from_slice(&[
+            0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x04, 0x00, 0x03, 0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00,
+            0x03, 0x11, 0x00,
+        ]);
+        let ((w, h), comps) = jpeg_dimensions_and_components(&b).expect("parses");
+        assert_eq!((w, h), (3, 4));
+        assert_eq!(comps, 3);
+    }
+
+    #[test]
+    fn detects_grayscale_components() {
+        let b = [
+            0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x10, 0x00, 0x20, 0x01,
+        ];
+        let ((w, h), comps) = jpeg_dimensions_and_components(&b).expect("parses");
+        assert_eq!((w, h), (32, 16));
+        assert_eq!(comps, 1);
+    }
+
+    #[test]
+    fn handles_escaped_ff_bytes_in_entropy_data() {
+        // SOF followed by entropy data containing 0xFF00 (escaped byte)
+        let mut b = vec![0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x10, 0x00, 0x20, 0x01];
+        b.extend_from_slice(&[0xDA, 0xFF, 0x00, 0xFF, 0xFF, 0x12]); // SOS + escaped bytes
+        let ((w, h), _) = jpeg_dimensions_and_components(&b).expect("parses");
+        assert_eq!((w, h), (32, 16));
+    }
+
+    #[test]
+    fn returns_none_for_truncated_data() {
+        assert!(jpeg_dimensions_and_components(&[]).is_none());
+        assert!(jpeg_dimensions_and_components(&[0xFF, 0xD8]).is_none());
+        assert!(jpeg_dimensions_and_components(&[0xFF, 0xC0]).is_none());
+    }
+}

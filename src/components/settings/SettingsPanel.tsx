@@ -72,7 +72,7 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
         <h2 className="text-2xl font-semibold">Settings</h2>
         <div className="flex items-center gap-3">
           {saveStatus === "saved" && <span className="text-sm text-success">Saved</span>}
-          <Button onClick={onSave} disabled={saveStatus === "saving"}>
+          <Button onClick={() => onSave()} disabled={saveStatus === "saving"}>
             <Save size={16} />
             {saveStatus === "saving" ? "Saving..." : "Save"}
           </Button>

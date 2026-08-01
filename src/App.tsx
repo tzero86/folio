@@ -19,8 +19,9 @@ import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { ToastContainer, useToast } from "./components/ui/Toast";
 import { metadataCache } from "./lib/cache";
+import { sanitizeSettings } from "./lib/settings";
 import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs, cancelDownload } from "./lib/tauri";
-import { cn } from "./lib/utils";
+import { cn, parseBookId } from "./lib/utils";
 
 import type { QueueItem, AppSettings, Tab, BookMetadata } from "./types";
 import "./index.css";
@@ -31,13 +32,6 @@ const NAV: { id: Tab; label: string; icon: typeof List }[] = [
   { id: "library", label: "Library", icon: Library },
   { id: "settings", label: "Settings", icon: Settings },
 ];
-
-function parseBookId(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed.includes("/")) return trimmed;
-  const match = trimmed.match(/archive\.org\/details\/([^/?#]+)/);
-  return match?.[1] ?? trimmed.split("/").pop() ?? trimmed;
-}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("library");
@@ -385,11 +379,12 @@ export default function App() {
       try {
         const store = await loadStore("settings.bin");
         storeRef.current = store;
-        const saved = await store.get<AppSettings>("settings");
+        const saved = await store.get<unknown>("settings");
         if (saved) {
-          addLog("info", "Loaded saved settings", JSON.stringify(saved));
-          setSettings((prev) => ({ ...prev, ...saved, password: saved.password ?? "" }));
-          if (saved.defaultTab) setActiveTab(saved.defaultTab);
+          const sanitized = sanitizeSettings(saved);
+          addLog("info", "Loaded saved settings", JSON.stringify(sanitized));
+          setSettings(sanitized);
+          if (sanitized.defaultTab) setActiveTab(sanitized.defaultTab);
         } else {
           addLog("info", "No saved settings found");
           // First run: prompt for setup unless the user explicitly skipped it before.
@@ -409,7 +404,7 @@ export default function App() {
       addLog("error", "Cannot save settings: store not loaded");
       return;
     }
-    const toSave = next ?? settings;
+    const toSave = sanitizeSettings(next ?? settings);
     setSaveStatus("saving");
     addLog("info", "Saving settings");
     try {
@@ -428,8 +423,9 @@ export default function App() {
 
   const completeSetup = useCallback(
     async (next: AppSettings) => {
-      setSettings(next);
-      await saveSettings(next);
+      const sanitized = sanitizeSettings(next);
+      setSettings(sanitized);
+      await saveSettings(sanitized);
       setSetupOpen(false);
     },
     [saveSettings]

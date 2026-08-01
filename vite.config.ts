@@ -9,6 +9,11 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [tailwindcss(), react()],
 
+  test: {
+    environment: "jsdom",
+    globals: true,
+  },
+
   // keep pdfjs-dist un-bundled so its worker URL stays stable (avoids
   // "Setting up fake worker failed" after Vite re-optimizes deps)
   optimizeDeps: {
