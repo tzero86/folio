@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Loader2, X, Maximize } from "lucide-react";
+import { ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Loader2, X, Maximize, Maximize2, Minimize2 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -29,6 +29,8 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
   const [numPages, setNumPages] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [fitScale, setFitScale] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Load the document from the asset protocol URL - pdf.js issues range
   // requests, so only the requested pages are transferred, not the whole file.
@@ -113,6 +115,45 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     };
   }, [open, pageNum, zoom, numPages]);
 
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      dialogRef.current
+        ?.requestFullscreen()
+        .catch((e) => setError(String(e)));
+    }
+  }, []);
+
+  // Track fullscreen state and re-fit the page when entering fullscreen
+  useEffect(() => {
+    const onFsChange = () => {
+      const active = document.fullscreenElement === dialogRef.current;
+      setIsFullscreen(active);
+      if (active) {
+        // container width changed - recompute fit from the rendered page
+        requestAnimationFrame(() => {
+          const canvas = canvasRef.current;
+          const container = containerRef.current;
+          if (!canvas || !container) return;
+          const baseWidth = canvas.getBoundingClientRect().width / zoom;
+          if (baseWidth > 0) {
+            setZoom(Math.max(0.25, (container.clientWidth - 48) / baseWidth));
+          }
+        });
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, [zoom]);
+
+  // leave fullscreen when the viewer closes
+  useEffect(() => {
+    if (!open && document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, [open]);
+
   const goPage = useCallback(
     (delta: number) => {
       setPageNum((p) => Math.min(numPages, Math.max(1, p + delta)));
@@ -177,6 +218,10 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         case "-":
           setZoom((z) => Math.max(0.25, z - ZOOM_STEP));
           break;
+        case "f":
+        case "F":
+          toggleFullscreen();
+          break;
         case "Escape":
           onClose();
           break;
@@ -184,10 +229,11 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, goPage, onClose]);
+  }, [open, goPage, onClose, toggleFullscreen]);
 
   return (
     <Dialog open={open} onClose={onClose} className="flex h-[88vh] w-[88vw] max-w-7xl flex-col p-0">
+      <div ref={dialogRef} className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary" title={title}>
           {title}
@@ -202,6 +248,9 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom(fitScale)} title="Fit to width" aria-label="Fit to width">
             <Maximize size={16} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFullscreen} title="Fullscreen (F)" aria-label="Toggle fullscreen">
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </Button>
           <div className="mx-2 h-5 w-px bg-border" />
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => goPage(-1)} disabled={pageNum <= 1} title="Previous page" aria-label="Previous page">
@@ -233,6 +282,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         ) : (
           <canvas ref={canvasRef} onClick={handleCanvasClick} className="rounded-sm bg-white shadow-2xl" title="Click left/right half to turn pages" />
         )}
+      </div>
       </div>
     </Dialog>
   );
