@@ -24,6 +24,7 @@ interface QueuePanelProps {
 
 export function QueuePanel({
   items,
+  settings,
   selectedId,
   onAdd,
   onRemove,
@@ -178,6 +179,7 @@ export function QueuePanel({
 
       {selectedItem && (
         <BookDetails
+          visibleByDefault={settings.showDetailsPanel}
           coverUrl={
             selectedItem.metadata
               ? `https://archive.org/download/${selectedItem.metadata.identifier}/__ia_thumb.jpg`

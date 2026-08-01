@@ -13,10 +13,11 @@ interface BookDetailsProps {
   description?: string | null;
   actions?: ReactNode;
   onClose?: () => void;
+  /** Initial visibility; the user can still collapse/expand per session. */
+  visibleByDefault?: boolean;
 }
 
 const STORAGE_WIDTH = "folio.ui.detailsWidth";
-const STORAGE_COLLAPSED = "folio.ui.detailsCollapsed";
 const DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 480;
@@ -48,9 +49,9 @@ function useUiPrefs<T>(key: string, fallback: T): [T, (v: T) => void] {
  * Right-hand details panel: large cover, readable typography, metadata fields
  * and action buttons. Collapsible and width-resizable via the left-edge grip.
  */
-export function BookDetails({ coverUrl, title, fields, description, actions, onClose }: BookDetailsProps) {
+export function BookDetails({ coverUrl, title, fields, description, actions, onClose, visibleByDefault = true }: BookDetailsProps) {
   const [width, setWidth] = useUiPrefs(STORAGE_WIDTH, DEFAULT_WIDTH);
-  const [collapsed, setCollapsed] = useUiPrefs(STORAGE_COLLAPSED, false);
+  const [collapsed, setCollapsed] = useState(!visibleByDefault);
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const visibleFields = fields.filter((f) => f.value !== null && f.value !== undefined && f.value !== "");
@@ -163,9 +164,13 @@ export function BookDetails({ coverUrl, title, fields, description, actions, onC
             <p className="mt-1 text-sm leading-relaxed text-text-secondary">{description}</p>
           </div>
         )}
-
-        {actions && <div className="mt-5 flex flex-wrap gap-2">{actions}</div>}
       </div>
+
+      {/* Actions live outside the scroll area so they stay visible even when
+          the panel is short (e.g. with the debug console expanded). */}
+      {actions && (
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-border p-3">{actions}</div>
+      )}
     </aside>
   );
 }

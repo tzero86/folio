@@ -35,6 +35,7 @@ export interface AppSettings {
   theme: "dark" | "light";
   fontScale: number;
   openOutputAfterDownload: boolean;
+  showDetailsPanel: boolean;
 }
 
 export interface SearchResult {

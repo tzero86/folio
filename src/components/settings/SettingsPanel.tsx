@@ -205,6 +205,12 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
                   <option value={1.25}>Extra large</option>
                 </select>
               </div>
+              <ToggleRow
+                label="Show details panel by default"
+                hint="Book details and actions appear on the right when you select something"
+                checked={settings.showDetailsPanel}
+                onChange={(v) => update("showDetailsPanel", v)}
+              />
             </Section>
 
             <Section title="Startup">

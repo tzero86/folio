@@ -12,6 +12,7 @@ import type { ToastType } from "../ui/Toast";
 interface SearchPanelProps {
   onAdd: (urlOrId: string) => Promise<void>;
   addToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
+  showDetailsPanel: boolean;
 }
 
 const ROWS = 50;
@@ -34,7 +35,7 @@ function loadSavedSearch(): SavedSearch {
   }
 }
 
-export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
+export function SearchPanel({ onAdd, addToast, showDetailsPanel }: SearchPanelProps) {
   const [query, setQuery] = useState(() => loadSavedSearch().query);
   const [author, setAuthor] = useState(() => loadSavedSearch().author ?? "");
   const [yearFrom, setYearFrom] = useState(() => loadSavedSearch().yearFrom ?? "");
@@ -332,6 +333,7 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
 
       {selected && (
         <BookDetails
+          visibleByDefault={showDetailsPanel}
           coverUrl={`https://archive.org/services/img/${selected.identifier}`}
           title={selected.title}
           fields={selectedMetaFields}

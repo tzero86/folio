@@ -27,5 +27,6 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     theme: s.theme === "light" ? "light" : "dark",
     fontScale: num(s.fontScale, 0.8, 1.5, 1),
     openOutputAfterDownload: s.openOutputAfterDownload === true,
+    showDetailsPanel: s.showDetailsPanel !== false,
   };
 }

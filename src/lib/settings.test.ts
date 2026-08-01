@@ -17,6 +17,7 @@ describe("sanitizeSettings", () => {
       theme: "dark",
       fontScale: 1,
       openOutputAfterDownload: false,
+      showDetailsPanel: true,
     });
   });
 

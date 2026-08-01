@@ -14,9 +14,10 @@ import type { ToastType } from "../ui/Toast";
 interface LibraryPanelProps {
   addToast: (type: ToastType, title: string, message?: string, duration?: number) => string;
   onGoToSearch: () => void;
+  showDetailsPanel: boolean;
 }
 
-export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
+export function LibraryPanel({ addToast, onGoToSearch, showDetailsPanel }: LibraryPanelProps) {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
@@ -259,6 +260,7 @@ export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
 
       {selected && (
         <BookDetails
+          visibleByDefault={showDetailsPanel}
           coverUrl={selected.cover_url}
           title={selected.title}
           fields={detailsFields}

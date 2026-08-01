@@ -54,6 +54,7 @@ export default function App() {
     theme: "dark",
     fontScale: 1,
     openOutputAfterDownload: false,
+    showDetailsPanel: true,
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -655,10 +656,10 @@ export default function App() {
             />
           )}
           {activeTab === "search" && (
-            <SearchPanel onAdd={addItem} addToast={addToast} />
+            <SearchPanel onAdd={addItem} addToast={addToast} showDetailsPanel={settings.showDetailsPanel} />
           )}
           {activeTab === "library" && (
-            <LibraryPanel addToast={addToast} onGoToSearch={() => setActiveTab("search")} />
+            <LibraryPanel addToast={addToast} onGoToSearch={() => setActiveTab("search")} showDetailsPanel={settings.showDetailsPanel} />
           )}
           {activeTab === "settings" && <SettingsPanel settings={settings} onChange={setSettings} onBrowse={browseOutputDir} onSave={saveSettings} saveStatus={saveStatus} />}
         </motion.div>
