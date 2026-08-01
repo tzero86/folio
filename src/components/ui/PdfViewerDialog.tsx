@@ -5,6 +5,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
+import { cn } from "../../lib/utils";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -161,6 +162,40 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     [numPages]
   );
 
+  // --- Mouse zoom + pan ---
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const panState = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const panMovedRef = useRef(false);
+  const [dragging, setDragging] = useState(false);
+
+  // Ctrl+wheel (and trackpad pinch, which Chromium delivers as ctrl+wheel)
+  // zooms toward the cursor, keeping the point under the pointer stable.
+  useEffect(() => {
+    if (!open) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const onZoomWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const next = Math.min(3, Math.max(0.25, zoomRef.current * factor));
+      const ratio = next / zoomRef.current;
+      zoomRef.current = next;
+      setZoom(next);
+      // after the canvas resizes, adjust scroll so the cursor point stays put
+      requestAnimationFrame(() => {
+        el.scrollLeft = (px + el.scrollLeft) * ratio - px;
+        el.scrollTop = (py + el.scrollTop) * ratio - py;
+      });
+    };
+    el.addEventListener("wheel", onZoomWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onZoomWheel);
+  }, [open]);
+
   // Wheel-to-flip: native scrolling within a tall page; flipping only once the
   // user reaches the bottom/top of the scroll area (reader-app convention).
   useEffect(() => {
@@ -168,6 +203,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     const el = containerRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return; // reserved for zoom
       const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
       const atTop = el.scrollTop <= 2;
       if (e.deltaY > 0 && atBottom) {
@@ -182,9 +218,45 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     return () => el.removeEventListener("wheel", onWheel);
   }, [open, goPage]);
 
-  // Click halves of the page to flip (PDF-reader convention).
+  const handlePointerDown = (e: React.PointerEvent) => {
+    const el = containerRef.current;
+    if (!el || e.button !== 0) return;
+    panState.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+      moved: false,
+    };
+    el.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const s = panState.current;
+    const el = containerRef.current;
+    if (!s || !el) return;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    if (!s.moved && Math.abs(dx) + Math.abs(dy) > 4) s.moved = true;
+    if (!s.moved) return;
+    el.scrollLeft = s.scrollLeft - dx;
+    el.scrollTop = s.scrollTop - dy;
+    setDragging(true);
+  };
+
+  const handlePointerUp = () => {
+    panMovedRef.current = panState.current?.moved ?? false;
+    panState.current = null;
+    setDragging(false);
+  };
+
+  // Click halves of the page to flip (PDF-reader convention) - skipped after a drag.
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (panMovedRef.current) {
+        panMovedRef.current = false;
+        return;
+      }
       const rect = e.currentTarget.getBoundingClientRect();
       if (e.clientX - rect.left > rect.width / 2) goPage(1);
       else goPage(-1);
@@ -269,7 +341,18 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         </div>
       </div>
 
-      <div ref={containerRef} className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg-overlay p-6">
+      <div
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className={cn(
+          "flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg-overlay p-6",
+          dragging ? "cursor-grabbing select-none" : "cursor-grab"
+        )}
+        title="Scroll to move, drag to pan, Ctrl+wheel to zoom"
+      >
         {loading ? (
           <div className="flex items-center gap-2 py-20 text-text-muted">
             <Loader2 size={18} className="animate-spin" />
