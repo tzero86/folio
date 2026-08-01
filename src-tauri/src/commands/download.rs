@@ -16,7 +16,12 @@ pub struct DownloadRequest {
 }
 
 #[command]
-pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> Result<(), String> {
+pub async fn download_books(
+    request: DownloadRequest,
+    app_handle: AppHandle,
+    cancellations: tauri::State<'_, crate::CancellationMap>,
+) -> Result<(), String> {
+    let cancellations = cancellations.inner().clone();
     let client = reqwest::Client::builder()
         .cookie_store(true)
         .http1_only()
@@ -43,6 +48,14 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
         let save_metadata = request.save_metadata;
         let id_clone = id.clone();
 
+        // register a fresh cancellation flag for this identifier
+        let cancel_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let mut map = cancellations.lock().map_err(|e| e.to_string())?;
+            map.insert(id_clone.clone(), cancel_flag.clone());
+        }
+        let cancellations_task = cancellations.clone();
+
         tauri::async_runtime::spawn(async move {
             let res = crate::downloader::orchestrator::download_book(
                 &c,
@@ -51,6 +64,7 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
                 resolution,
                 create_pdf,
                 save_metadata,
+                cancel_flag.clone(),
                 |status, detail| {
                     let mut payload = serde_json::json!({
                         "id": id_clone,
@@ -75,16 +89,27 @@ pub async fn download_books(request: DownloadRequest, app_handle: AppHandle) -> 
             )
             .await;
 
+            let status = if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                "cancelled"
+            } else {
+                "error"
+            };
+
             if let Err(e) = res {
                 app.emit(
                     "download-status",
                     serde_json::json!({
                         "id": id_clone,
-                        "status": "error",
+                        "status": status,
                         "message": e.to_string(),
                     }),
                 )
                 .ok();
+            }
+
+            // drop the flag so future downloads of the same id start fresh
+            if let Ok(mut map) = cancellations_task.lock() {
+                map.remove(&id_clone);
             }
         });
     }

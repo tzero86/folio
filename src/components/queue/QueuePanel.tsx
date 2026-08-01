@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback } from "react";
-import { Plus, Download, FolderOpen, Trash2, Play } from "lucide-react";
+import { Plus, Download, FolderOpen, Trash2, Play, XCircle } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { QueueItem } from "./QueueItem";
 import { BookDetails } from "../ui/BookDetails";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { formatShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import type { QueueItem as QueueItemType, AppSettings } from "../../types";
 
@@ -17,6 +18,7 @@ interface QueuePanelProps {
   onSelect: (id: string) => void;
   onDownload: () => void;
   onDownloadItem: (id: string) => void;
+  onCancelItem: (id: string) => void;
   onOpenOutput: () => void;
 }
 
@@ -29,10 +31,12 @@ export function QueuePanel({
   onSelect,
   onDownload,
   onDownloadItem,
+  onCancelItem,
   onOpenOutput,
 }: QueuePanelProps) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -44,20 +48,36 @@ export function QueuePanel({
 
   const selectedItem = items.find((i) => i.id === selectedId) ?? null;
 
+  const isActive = (s: string) => s === "started" || s === "downloading" || s === "queued";
+
+  const openMenu = (e: React.MouseEvent, item: QueueItemType) => {
+    e.preventDefault();
+    const items: ContextMenuItem[] = [
+      ...(isActive(item.status)
+        ? [{ label: "Cancel download", icon: <XCircle size={14} />, onSelect: () => onCancelItem(item.id) }]
+        : [{ label: "Download now", icon: <Play size={14} />, onSelect: () => onDownloadItem(item.id) }]),
+      { label: "Remove", icon: <Trash2 size={14} />, danger: true, onSelect: () => onRemove(item.id) },
+    ];
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
   const detailsActions = selectedItem ? (
     <>
-      <Button
-        size="sm"
-        onClick={() => onDownloadItem(selectedItem.id)}
-        disabled={
-          selectedItem.status === "started" ||
-          selectedItem.status === "downloading" ||
-          selectedItem.status === "queued"
-        }
-      >
-        <Play size={14} />
-        Download now
-      </Button>
+      {isActive(selectedItem.status) ? (
+        <Button variant="danger" size="sm" onClick={() => onCancelItem(selectedItem.id)}>
+          <XCircle size={14} />
+          Cancel download
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          onClick={() => onDownloadItem(selectedItem.id)}
+          disabled={isActive(selectedItem.status)}
+        >
+          <Play size={14} />
+          Download now
+        </Button>
+      )}
       <Button variant="ghost" size="sm" onClick={() => onRemove(selectedItem.id)}>
         <Trash2 size={14} />
         Remove
@@ -126,6 +146,8 @@ export function QueuePanel({
                   onSelect={() => onSelect(item.id)}
                   onRemove={() => onRemove(item.id)}
                   onDownload={() => onDownloadItem(item.id)}
+                  onCancel={() => onCancelItem(item.id)}
+                  onContextMenu={(e) => openMenu(e, item)}
                 />
               ))}
             </div>
@@ -167,6 +189,8 @@ export function QueuePanel({
           actions={detailsActions}
         />
       )}
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
     </div>
   );
 }

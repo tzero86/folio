@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { BookOpen, FileText, Trash2, FolderOpen, Eye, Plus, Search } from "lucide-react";
 import { Button } from "../ui/Button";
+import { Input } from "../ui/Input";
 import { BookDetails } from "../ui/BookDetails";
 import { PdfViewerDialog } from "../ui/PdfViewerDialog";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { listLibraryBooks, deleteLibraryBook } from "../../lib/tauri";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { cn } from "../../lib/utils";
@@ -19,6 +21,50 @@ export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<LibraryBook | null>(null);
   const [viewerPath, setViewerPath] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<"recent" | "title" | "year" | "oldest">("recent");
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+
+  const openMenu = (e: React.MouseEvent, book: LibraryBook) => {
+    e.preventDefault();
+    const items: ContextMenuItem[] = [
+      ...(isPdf(book.pdf_path)
+        ? [{ label: "View", icon: <Eye size={14} />, onSelect: () => setViewerPath(book.pdf_path) }]
+        : []),
+      { label: "Open", icon: <FileText size={14} />, onSelect: () => handleOpen(book) },
+      { label: "Open location", icon: <FolderOpen size={14} />, onSelect: () => handleOpenLocation(book) },
+      { label: "Remove", icon: <Trash2 size={14} />, danger: true, onSelect: () => handleDelete(book) },
+    ];
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
+  const handleCardClick = (book: LibraryBook) => {
+    setSelected(book);
+    setMenu(null);
+  };
+
+  const visibleBooks = books
+    .filter((b) => {
+      const q = filter.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        b.title.toLowerCase().includes(q) ||
+        (b.creator ?? "").toLowerCase().includes(q) ||
+        b.identifier.toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      switch (sort) {
+        case "title":
+          return a.title.localeCompare(b.title);
+        case "year":
+          return (b.year ?? "").localeCompare(a.year ?? "");
+        case "oldest":
+          return a.downloaded_at.localeCompare(b.downloaded_at);
+        default:
+          return b.downloaded_at.localeCompare(a.downloaded_at);
+      }
+    });
 
   const load = async () => {
     setLoading(true);
@@ -129,16 +175,42 @@ export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-        <h2 className="border-b border-border px-4 py-3 text-sm font-semibold text-text-primary">
-          Library ({books.length})
-        </h2>
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+          <h2 className="mr-auto text-sm font-semibold text-text-primary">
+            Library{filter ? ` (${visibleBooks.length}/${books.length})` : ` (${books.length})`}
+          </h2>
+          <Input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter library…"
+            className="h-8 w-44 text-xs"
+            aria-label="Filter library"
+          />
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as typeof sort)}
+            aria-label="Sort library"
+            className="h-8 rounded-lg border border-border bg-bg-secondary px-2 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value="recent">Recently added</option>
+            <option value="title">Title A–Z</option>
+            <option value="year">Newest year</option>
+            <option value="oldest">Oldest added</option>
+          </select>
+        </div>
         <div className="flex-1 overflow-y-auto p-4">
+          {visibleBooks.length === 0 && filter ? (
+            <div className="flex h-full items-center justify-center text-center text-text-muted">
+              <p className="text-sm">No books match “{filter}”.</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {books.map((book) => (
+            {visibleBooks.map((book) => (
               <button
                 key={book.id}
                 type="button"
-                onClick={() => setSelected(book)}
+                onClick={() => handleCardClick(book)}
+                onContextMenu={(e) => openMenu(e, book)}
                 aria-pressed={selected?.identifier === book.identifier}
                 className={cn(
                   "flex gap-3 rounded-xl border p-3 text-left transition-colors",
@@ -181,6 +253,7 @@ export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
               <span className="text-xs">Browse Archive.org</span>
             </button>
           </div>
+          )}
         </div>
       </div>
 
@@ -202,6 +275,8 @@ export function LibraryPanel({ addToast, onGoToSearch }: LibraryPanelProps) {
           onClose={() => setViewerPath(null)}
         />
       )}
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
     </div>
   );
 }

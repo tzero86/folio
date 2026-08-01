@@ -65,6 +65,10 @@ export async function getLogs(lastCount: number): Promise<[string[], number]> {
   return invoke("get_logs", { lastCount });
 }
 
+export async function cancelDownload(identifier: string): Promise<void> {
+  return invoke("cancel_download", { identifier });
+}
+
 export interface SearchFilters {
   author?: string;
   yearFrom?: number;

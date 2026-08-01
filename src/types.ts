@@ -32,6 +32,9 @@ export interface AppSettings {
   saveMetadata: boolean;
   autoDownload: boolean;
   defaultTab: Tab;
+  theme: "dark" | "light";
+  fontScale: number;
+  openOutputAfterDownload: boolean;
 }
 
 export interface SearchResult {

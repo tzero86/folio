@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -12,11 +13,15 @@ pub async fn download_book<F>(
     resolution: i32,
     create_pdf: bool,
     save_metadata: bool,
+    cancel: Arc<AtomicBool>,
     emit_status: F,
 ) -> Result<String>
 where
     F: Fn(&str, Option<&str>),
 {
+    if cancel.load(Ordering::Relaxed) {
+        anyhow::bail!("cancelled");
+    }
     info!("starting download for {}", identifier);
     emit_status("started", None);
 
@@ -46,10 +51,14 @@ where
         let id = identifier.to_string();
         let paths = image_paths.clone();
         let sem = semaphore.clone();
+        let cancel_flag = cancel.clone();
 
         let handle = tokio::spawn(async move {
             let _permit = sem.acquire().await?;
-            super::image::download_image(&c, &url, &id, &path)
+            if cancel_flag.load(Ordering::Relaxed) {
+                anyhow::bail!("cancelled");
+            }
+            super::image::download_image(&c, &url, &id, &path, cancel_flag.clone())
                 .await
                 .with_context(|| format!("downloading page {}", i + 1))?;
             paths.lock().await.push(path);
@@ -60,6 +69,9 @@ where
 
     for (i, handle) in handles.into_iter().enumerate() {
         handle.await??;
+        if cancel.load(Ordering::Relaxed) {
+            anyhow::bail!("cancelled");
+        }
         let detail = format!("{}:{}", i + 1, total);
         emit_status("downloading", Some(&detail));
     }
@@ -71,6 +83,9 @@ where
     });
 
     info!("assembling PDF for {}", identifier);
+    if cancel.load(Ordering::Relaxed) {
+        anyhow::bail!("cancelled");
+    }
     emit_status("assembling", None);
 
     let final_path = if create_pdf {

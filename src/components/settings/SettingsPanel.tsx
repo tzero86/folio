@@ -102,6 +102,32 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
         </div>
 
         <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-text-secondary">Theme</label>
+          <select
+            value={settings.theme}
+            onChange={(e) => update("theme", e.target.value as AppSettings["theme"])}
+            className="h-10 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-text-secondary">Font size</label>
+          <select
+            value={settings.fontScale}
+            onChange={(e) => update("fontScale", Number(e.target.value))}
+            className="h-10 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <option value={0.9}>Small</option>
+            <option value={1}>Default</option>
+            <option value={1.1}>Large</option>
+            <option value={1.25}>Extra large</option>
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between">
           <div>
             <label className="text-sm font-medium text-text-secondary">Auto-download added books</label>
             <p className="text-xs text-text-muted">Starts the download immediately when a book is added, if an output directory is set.</p>
@@ -120,6 +146,16 @@ export function SettingsPanel({ settings, onChange, onBrowse, onSave, saveStatus
             type="checkbox"
             checked={settings.saveMetadata}
             onChange={(e) => update("saveMetadata", e.target.checked)}
+            className="accent-accent h-4 w-4"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-text-secondary">Open output folder after download</label>
+          <input
+            type="checkbox"
+            checked={settings.openOutputAfterDownload}
+            onChange={(e) => update("openOutputAfterDownload", e.target.checked)}
             className="accent-accent h-4 w-4"
           />
         </div>

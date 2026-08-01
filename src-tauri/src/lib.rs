@@ -8,7 +8,22 @@ use commands::library::{add_library_book, list_library_books, find_library_book,
 use commands::metadata::fetch_book_metadata;
 use commands::search::search_archive;
 use sqlx::sqlite::SqlitePool;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
+
+/// Per-identifier cancellation flags for in-flight downloads.
+pub type CancellationMap = Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>;
+
+#[tauri::command]
+fn cancel_download(identifier: String, cancellations: tauri::State<CancellationMap>) -> Result<(), String> {
+    let map = cancellations.lock().map_err(|e| e.to_string())?;
+    if let Some(flag) = map.get(&identifier) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    Ok(())
+}
 
 #[tauri::command]
 fn get_logs(last_count: usize) -> (Vec<String>, usize) {
@@ -29,9 +44,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
+            app.manage::<CancellationMap>(Arc::new(Mutex::new(HashMap::new())));
             let rt = tauri::async_runtime::handle();
             let pool = rt.block_on(async {
                 let app_dir = app.path().app_data_dir().expect("app data dir");
@@ -50,6 +67,7 @@ pub fn run() {
             fetch_book_metadata,
             search_archive,
             download_books,
+            cancel_download,
             get_logs,
             add_library_book,
             list_library_books,

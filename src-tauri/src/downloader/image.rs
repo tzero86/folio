@@ -1,4 +1,6 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
@@ -7,11 +9,15 @@ pub async fn download_image(
     link: &str,
     book_id: &str,
     output_path: &Path,
+    cancel: Arc<AtomicBool>,
 ) -> Result<()> {
     let max_retries = 3;
     let mut last_error = None;
 
     for attempt in 0..max_retries {
+        if cancel.load(Ordering::Relaxed) {
+            anyhow::bail!("cancelled");
+        }
         let response = client
             .get(link)
             .header("Referer", "https://archive.org/")

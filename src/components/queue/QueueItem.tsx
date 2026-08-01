@@ -1,4 +1,4 @@
-import { Play, Trash2, FileText, ImageIcon } from "lucide-react";
+import { Play, Trash2, FileText, ImageIcon, Square } from "lucide-react";
 import { Button } from "../ui/Button";
 import { StatusBadge } from "../ui/StatusBadge";
 import { cn } from "../../lib/utils";
@@ -10,10 +10,13 @@ interface QueueItemProps {
   onSelect: () => void;
   onRemove: () => void;
   onDownload: () => void;
+  onCancel: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }
 
-export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: QueueItemProps) {
+export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload, onCancel, onContextMenu }: QueueItemProps) {
   const meta = item.metadata;
+  const isActive = item.status === "started" || item.status === "downloading" || item.status === "queued";
   const coverUrl = meta
     ? `https://archive.org/download/${meta.identifier}/__ia_thumb.jpg`
     : null;
@@ -32,6 +35,7 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
       aria-pressed={isSelected}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
+      onContextMenu={onContextMenu}
       className={cn(
         "group flex items-start gap-3 rounded-xl border p-3 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
         isSelected
@@ -98,18 +102,33 @@ export function QueueItem({ item, isSelected, onSelect, onRemove, onDownload }: 
       </div>
 
       <div className="flex shrink-0 flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDownload();
-          }}
-          title="Download now"
-          aria-label={`Download ${meta?.title ?? item.urlOrId}`}
-        >
-          <Play size={14} />
-        </Button>
+        {isActive ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCancel();
+            }}
+            title="Cancel download"
+            aria-label={`Cancel download of ${meta?.title ?? item.urlOrId}`}
+          >
+            <Square size={14} className="text-danger" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload();
+            }}
+            title="Download now"
+            aria-label={`Download ${meta?.title ?? item.urlOrId}`}
+          >
+            <Play size={14} />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

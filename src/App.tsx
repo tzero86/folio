@@ -3,6 +3,8 @@ import { Library, List, Settings, Info, Search, ChevronsRight, ChevronsLeft } fr
 import { motion } from "framer-motion";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow, ProgressBarStatus } from "@tauri-apps/api/window";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { load as loadStore, Store } from "@tauri-apps/plugin-store";
@@ -17,10 +19,10 @@ import { useShortcuts } from "./hooks/useShortcuts";
 import { DebugConsole, useDebugConsole } from "./components/debug/DebugConsole";
 import { ToastContainer, useToast } from "./components/ui/Toast";
 import { metadataCache } from "./lib/cache";
-import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs } from "./lib/tauri";
+import { fetchBookMetadata, onDownloadStatus, downloadBooks, findLibraryBook, addLibraryBook, getLogs, cancelDownload } from "./lib/tauri";
 import { cn } from "./lib/utils";
 
-import type { QueueItem, AppSettings, Tab } from "./types";
+import type { QueueItem, AppSettings, Tab, BookMetadata } from "./types";
 import "./index.css";
 
 const NAV: { id: Tab; label: string; icon: typeof List }[] = [
@@ -55,6 +57,9 @@ export default function App() {
     saveMetadata: false,
     autoDownload: true,
     defaultTab: "library",
+    theme: "dark",
+    fontScale: 1,
+    openOutputAfterDownload: false,
   });
   const [aboutOpen, setAboutOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -63,6 +68,61 @@ export default function App() {
 
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  // --- Queue persistence across restarts ---
+  const QUEUE_KEY = "folio.queue";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(QUEUE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { id: string; urlOrId: string; metadata?: BookMetadata }[];
+      if (!Array.isArray(saved) || saved.length === 0) return;
+      setItems(
+        saved.map((s) => ({
+          id: s.id,
+          urlOrId: s.urlOrId,
+          status: "pending" as const,
+          progress: 0,
+          metadata: s.metadata,
+        }))
+      );
+      setSelectedId(saved[0]?.id ?? null);
+      addLog("info", `Restored ${saved.length} queued item(s)`);
+    } catch (e) {
+      addLog("error", "Failed to restore queue", String(e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const persistable = items
+      .filter((i) => i.status !== "done" && i.status !== "error")
+      .map((i) => ({ id: i.id, urlOrId: i.urlOrId, metadata: i.metadata }));
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(persistable));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [items]);
+
+  // --- Taskbar download progress ---
+  useEffect(() => {
+    const active = items.filter((i) => i.status === "downloading" || i.status === "started");
+    try {
+      const win = getCurrentWindow();
+      if (active.length === 0) {
+        win.setProgressBar({ status: ProgressBarStatus.None }).catch(() => {});
+      } else {
+        const avg = active.reduce((sum, i) => sum + i.progress, 0) / active.length;
+        win.setProgressBar({ status: ProgressBarStatus.Normal, progress: Math.max(0, Math.min(100, Math.round(avg))) }).catch(() => {});
+      }
+    } catch {
+      /* not in Tauri (plain browser) - ignore */
+    }
+  }, [items]);
 
   /** Mark a queue item queued and fire the backend download. Errors from the
    *  actual download arrive via status events; this only handles invoke errors. */
@@ -179,6 +239,34 @@ export default function App() {
     [downloadSingle]
   );
 
+  const cancelItem = useCallback(
+    (id: string) => {
+      const item = itemsRef.current.find((i) => i.id === id);
+      if (!item) return;
+      const identifier = item.metadata?.identifier ?? parseBookId(item.urlOrId);
+      cancelDownload(identifier).catch((e) => addLog("error", "Cancel failed", String(e)));
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, status: "pending", progress: 0, error: undefined } : i))
+      );
+      addLog("info", `Cancelling ${identifier}`);
+    },
+    [addLog]
+  );
+
+  // --- System notifications on download completion ---
+  const notifyComplete = useCallback(async (title: string, message: string) => {
+    try {
+      if (await getCurrentWindow().isFocused()) return;
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        granted = (await requestPermission()) === "granted";
+      }
+      if (granted) sendNotification({ title, body: message });
+    } catch {
+      /* not in Tauri - ignore */
+    }
+  }, []);
+
   const handleStatus = useCallback((payload: { id: string; status: string; pdf?: string; message?: string; current?: string; total?: string }) => {
     addLog("debug", `Status ${payload.status} for ${payload.id}`, JSON.stringify(payload));
     setItems((prev) => {
@@ -195,8 +283,14 @@ export default function App() {
           return { ...item, status: "downloading", progress: 100 };
         }
         if (payload.status === "done") {
-          addToast("success", "Download complete", payload.pdf ?? "PDF saved");
           const doneItem = prev.find((i) => i.metadata?.identifier === payload.id);
+          addToast("success", "Download complete", payload.pdf ?? "PDF saved");
+          notifyComplete("Download complete", doneItem?.metadata?.title ?? payload.id);
+          if (settingsRef.current.openOutputAfterDownload && payload.pdf) {
+            const sep = Math.max(payload.pdf.lastIndexOf("\\"), payload.pdf.lastIndexOf("/"));
+            const dir = sep > 0 ? payload.pdf.slice(0, sep) : payload.pdf;
+            openPath(dir).catch(() => {});
+          }
           if (doneItem?.metadata) {
             addLibraryBook({
               id: crypto.randomUUID(),
@@ -218,10 +312,15 @@ export default function App() {
           addToast("error", "Download failed", msg);
           return { ...item, status: "error", error: msg };
         }
+        if (payload.status === "cancelled") {
+          addLog("warn", `Download cancelled for ${payload.id}`);
+          addToast("info", "Download cancelled", payload.id);
+          return { ...item, status: "pending", progress: 0, error: undefined };
+        }
         return item;
       });
     });
-  }, [addLog, addToast]);
+  }, [addLog, addToast, notifyComplete]);
 
   useEffect(() => {
     const unlisten = onDownloadStatus(handleStatus);
@@ -263,7 +362,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [addLog, addToast]);
+  }, [addLog, addToast, notifyComplete]);
 
   // Poll Rust tracing logs every 2 seconds
   useEffect(() => {
@@ -407,8 +506,46 @@ export default function App() {
     });
   }, []);
 
+  // --- Theme + font size ---
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.style.fontSize = `${16 * settings.fontScale}px`;
+  }, [settings.theme, settings.fontScale]);
+
+  // --- Drag & drop Archive.org links onto the window ---
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const text = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+      const urls = text
+        .split(/\r?\n/)
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0 && !u.startsWith("#"));
+      if (urls.length === 0) return;
+      addLog("info", `Dropped ${urls.length} link(s)`);
+      urls.forEach((u) => addItem(u));
+    },
+    [addItem, addLog]
+  );
+
   return (
-    <div className="relative flex h-full w-full flex-col">
+    <div
+      className="relative flex h-full w-full flex-col"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
+      {dragOver && (
+        <div className="pointer-events-none fixed inset-0 z-[60] flex items-center justify-center border-4 border-dashed border-accent bg-accent-subtle/40">
+          <p className="rounded-lg bg-bg-secondary px-4 py-2 text-sm font-medium text-accent">Drop to add to queue</p>
+        </div>
+      )}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <div className="flex min-h-0 w-full flex-1">
         <aside className={cn("flex shrink-0 flex-col border-r border-border bg-bg-secondary transition-[width] duration-150", sidebarCollapsed ? "w-14" : "w-64")}>
@@ -517,6 +654,7 @@ export default function App() {
               onSelect={setSelectedId}
               onDownload={startDownload}
               onDownloadItem={startSingleDownload}
+              onCancelItem={cancelItem}
               onOpenOutput={openOutput}
             />
           )}
