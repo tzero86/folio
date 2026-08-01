@@ -17,6 +17,8 @@ interface PdfViewerDialogProps {
 }
 
 const ZOOM_STEP = 0.25;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 8; // 800% - newspaper scans need deep zoom
 
 export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         const page = await doc.getPage(1);
         const containerWidth = containerRef.current?.clientWidth ?? 800;
         const vp = page.getViewport({ scale: 1 });
-        const scale = Math.max(0.25, (containerWidth - 48) / vp.width);
+        const scale = Math.max(MIN_ZOOM, (containerWidth - 48) / vp.width);
         setFitScale(scale);
         setZoom(scale);
       } catch (e) {
@@ -92,15 +94,23 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         if (!canvas) return;
         const dpr = window.devicePixelRatio || 1;
         const viewport = page.getViewport({ scale: zoom });
-        canvas.width = Math.floor(viewport.width * dpr);
-        canvas.height = Math.floor(viewport.height * dpr);
+        // Pixel budget: zoom freely, but cap the actual bitmap so huge scans
+        // (e.g. newspapers at 800%) don't OOM the webview. Beyond the budget
+        // the canvas is CSS-upscaled (slightly softer, still usable).
+        const budgetPx = 96e6;
+        const baseW = viewport.width / zoom;
+        const baseH = viewport.height / zoom;
+        const renderScale = Math.min(zoom, Math.sqrt(budgetPx / (baseW * baseH * dpr * dpr)));
+        const renderViewport = page.getViewport({ scale: renderScale });
+        canvas.width = Math.floor(renderViewport.width * dpr);
+        canvas.height = Math.floor(renderViewport.height * dpr);
         canvas.style.width = `${Math.floor(viewport.width)}px`;
         canvas.style.height = `${Math.floor(viewport.height)}px`;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderTaskRef.current?.cancel();
-        const task = page.render({ canvas, canvasContext: ctx, viewport });
+        const task = page.render({ canvas, canvasContext: ctx, viewport: renderViewport });
         renderTaskRef.current = task;
         await task.promise;
       } catch (e) {
@@ -139,7 +149,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
           if (!canvas || !container) return;
           const baseWidth = canvas.getBoundingClientRect().width / zoom;
           if (baseWidth > 0) {
-            setZoom(Math.max(0.25, (container.clientWidth - 48) / baseWidth));
+            setZoom(Math.max(MIN_ZOOM, (container.clientWidth - 48) / baseWidth));
           }
         });
       }
@@ -182,7 +192,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
       const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const next = Math.min(3, Math.max(0.25, zoomRef.current * factor));
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomRef.current * factor));
       const ratio = next / zoomRef.current;
       zoomRef.current = next;
       setZoom(next);
@@ -285,10 +295,10 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
           break;
         case "+":
         case "=":
-          setZoom((z) => Math.min(3, z + ZOOM_STEP));
+          setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP));
           break;
         case "-":
-          setZoom((z) => Math.max(0.25, z - ZOOM_STEP));
+          setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP));
           break;
         case "f":
         case "F":
@@ -311,11 +321,11 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
           {title}
         </h2>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(0.25, z - ZOOM_STEP))} title="Zoom out (-)" aria-label="Zoom out">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))} title="Zoom out (-)" aria-label="Zoom out">
             <ZoomOut size={16} />
           </Button>
           <span className="w-14 text-center text-xs text-text-muted">{Math.round(zoom * 100)}%</span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(3, z + ZOOM_STEP))} title="Zoom in (+)" aria-label="Zoom in">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))} title="Zoom in (+)" aria-label="Zoom in">
             <ZoomIn size={16} />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setZoom(fitScale)} title="Fit to width" aria-label="Fit to width">
