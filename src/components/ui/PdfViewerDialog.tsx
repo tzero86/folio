@@ -176,7 +176,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     const el = containerRef.current;
     if (!el) return;
     const onZoomWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
+      if (!e.ctrlKey && !e.altKey) return;
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const px = e.clientX - rect.left;
@@ -203,7 +203,7 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
     const el = containerRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) return; // reserved for zoom
+      if (e.ctrlKey || e.altKey) return; // reserved for zoom
       const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
       const atTop = el.scrollTop <= 2;
       if (e.deltaY > 0 && atBottom) {
@@ -348,22 +348,22 @@ export function PdfViewerDialog({ open, path, title, onClose }: PdfViewerDialogP
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         className={cn(
-          "flex min-h-0 flex-1 items-start justify-center overflow-auto bg-bg-overlay p-6",
+          "flex min-h-0 flex-1 overflow-auto bg-bg-overlay p-6",
           dragging ? "cursor-grabbing select-none" : "cursor-grab"
         )}
         title="Scroll to move, drag to pan, Ctrl+wheel to zoom"
       >
         {loading ? (
-          <div className="flex items-center gap-2 py-20 text-text-muted">
+          <div className="m-auto flex items-center gap-2 py-20 text-text-muted">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-sm">Loading PDF…</span>
           </div>
         ) : error ? (
-          <div className="py-20 text-center">
+          <div className="m-auto py-20 text-center">
             <p className="text-sm text-danger">{error}</p>
           </div>
         ) : (
-          <canvas ref={canvasRef} onClick={handleCanvasClick} className="rounded-sm bg-white shadow-2xl" title="Click left/right half to turn pages" />
+          <canvas ref={canvasRef} onClick={handleCanvasClick} className="m-auto rounded-sm bg-white shadow-2xl" title="Click left/right half to turn pages" />
         )}
       </div>
       </div>

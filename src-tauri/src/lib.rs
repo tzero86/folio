@@ -48,6 +48,18 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .setup(|app| {
+            // Window is created in code so we can disable WebView2's zoom
+            // hotkeys - otherwise Ctrl+wheel is eaten by browser-level page
+            // zoom and never reaches the PDF viewer's zoom handler.
+            tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+                .title("Folio")
+                .inner_size(1200.0, 800.0)
+                .min_inner_size(900.0, 650.0)
+                .center()
+                .zoom_hotkeys_enabled(false)
+                .build()
+                .expect("failed to create main window");
+
             app.manage::<CancellationMap>(Arc::new(Mutex::new(HashMap::new())));
             let rt = tauri::async_runtime::handle();
             let pool = rt.block_on(async {
