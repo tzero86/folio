@@ -65,6 +65,15 @@ export async function getLogs(lastCount: number): Promise<[string[], number]> {
   return invoke("get_logs", { lastCount });
 }
 
-export async function searchArchive(query: string, page: number, rows = 50): Promise<SearchResponse> {
-  return invoke("search_archive", { req: { query, page, rows } });
+export interface SearchFilters {
+  author?: string;
+  yearFrom?: number;
+  yearTo?: number;
+  sort?: "relevance" | "downloads" | "title" | "newest" | "oldest";
+}
+
+export async function searchArchive(query: string, page: number, filters: SearchFilters = {}, rows = 50): Promise<SearchResponse> {
+  return invoke("search_archive", {
+    req: { query, page, rows, ...filters },
+  });
 }

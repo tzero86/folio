@@ -3,7 +3,7 @@ import { Search, Plus, Loader2, FileText } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { BookDetails } from "../ui/BookDetails";
-import { searchArchive, fetchBookMetadata } from "../../lib/tauri";
+import { searchArchive, fetchBookMetadata, type SearchFilters } from "../../lib/tauri";
 import { searchCache, metadataCache } from "../../lib/cache";
 import { cn } from "../../lib/utils";
 import type { SearchResult, BookMetadata } from "../../types";
@@ -15,9 +15,31 @@ interface SearchPanelProps {
 }
 
 const ROWS = 50;
+const STORAGE_KEY = "folio.ui.lastSearch";
+
+interface SavedSearch {
+  query: string;
+  author?: string;
+  yearFrom?: string;
+  yearTo?: string;
+  sort?: SearchFilters["sort"];
+}
+
+function loadSavedSearch(): SavedSearch {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as SavedSearch) : { query: "" };
+  } catch {
+    return { query: "" };
+  }
+}
 
 export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => loadSavedSearch().query);
+  const [author, setAuthor] = useState(() => loadSavedSearch().author ?? "");
+  const [yearFrom, setYearFrom] = useState(() => loadSavedSearch().yearFrom ?? "");
+  const [yearTo, setYearTo] = useState(() => loadSavedSearch().yearTo ?? "");
+  const [sort, setSort] = useState<SearchFilters["sort"]>(() => loadSavedSearch().sort ?? "relevance");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [numFound, setNumFound] = useState(0);
   const [page, setPage] = useState(1);
@@ -31,9 +53,24 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
     async (pageToLoad: number) => {
       const q = query.trim();
       if (!q) return;
+      const filters: SearchFilters = {
+        author: author.trim() || undefined,
+        yearFrom: yearFrom ? Number(yearFrom) : undefined,
+        yearTo: yearTo ? Number(yearTo) : undefined,
+        sort,
+      };
+      // remember the last search + filters across sessions
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ query: q, author: author.trim(), yearFrom, yearTo, sort } satisfies SavedSearch)
+        );
+      } catch {
+        /* storage unavailable */
+      }
       setLoading(true);
       setSearched(true);
-      const cacheKey = `${q}|${pageToLoad}|${ROWS}`;
+      const cacheKey = `${q}|${pageToLoad}|${ROWS}|${author}|${yearFrom}|${yearTo}|${sort}`;
       const cached = searchCache.get(cacheKey);
       if (cached) {
         setResults(cached.docs);
@@ -43,7 +80,7 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
         return;
       }
       try {
-        const resp = await searchArchive(q, pageToLoad, ROWS);
+        const resp = await searchArchive(q, pageToLoad, filters, ROWS);
         searchCache.set(cacheKey, resp);
         setResults(resp.docs);
         setNumFound(resp.num_found);
@@ -56,8 +93,10 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
         setLoading(false);
       }
     },
-    [query, addToast]
+    [query, author, yearFrom, yearTo, sort, addToast]
   );
+
+  const hasActiveFilters = Boolean(author.trim() || yearFrom || yearTo || sort !== "relevance");
 
   const selectResult = useCallback((result: SearchResult) => {
     setSelected(result);
@@ -125,6 +164,60 @@ export function SearchPanel({ onAdd, addToast }: SearchPanelProps) {
               Search
             </Button>
           </form>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Input
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder="Author…"
+              className="h-8 w-40 text-xs"
+              aria-label="Filter by author"
+            />
+            <Input
+              value={yearFrom}
+              onChange={(e) => setYearFrom(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="Year from"
+              className="h-8 w-24 text-xs"
+              aria-label="Year from"
+              inputMode="numeric"
+            />
+            <Input
+              value={yearTo}
+              onChange={(e) => setYearTo(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="Year to"
+              className="h-8 w-24 text-xs"
+              aria-label="Year to"
+              inputMode="numeric"
+            />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SearchFilters["sort"])}
+              aria-label="Sort results"
+              className="h-8 rounded-lg border border-border bg-bg-secondary px-2 text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <option value="relevance">Relevance</option>
+              <option value="downloads">Most downloaded</option>
+              <option value="title">Title A–Z</option>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setAuthor("");
+                  setYearFrom("");
+                  setYearTo("");
+                  setSort("relevance");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+
           {searched && !loading && (
             <p className="mt-2 text-xs text-text-muted">
               {numFound.toLocaleString()} result{numFound === 1 ? "" : "s"} · page {page} of {totalPages}

@@ -1,13 +1,22 @@
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SearchRequest {
     pub query: String,
     #[serde(default = "default_page")]
     pub page: u32,
     #[serde(default = "default_rows")]
     pub rows: u32,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub year_from: Option<i32>,
+    #[serde(default)]
+    pub year_to: Option<i32>,
+    /// "relevance" | "downloads" | "title" | "newest" | "oldest"
+    #[serde(default)]
+    pub sort: Option<String>,
 }
 
 fn default_page() -> u32 {

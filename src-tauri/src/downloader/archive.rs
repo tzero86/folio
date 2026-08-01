@@ -160,15 +160,26 @@ fn extract_info_url(body: &str) -> Result<String> {
 }
 
 pub async fn search_books(req: &crate::commands::search::SearchRequest) -> Result<crate::commands::search::SearchResponse> {
-    let q = if req.query.trim().is_empty() {
-        "mediatype:texts".to_string()
-    } else {
-        format!("({}) AND mediatype:texts", req.query.trim())
-    };
+    let mut parts: Vec<String> = vec!["mediatype:texts".to_string()];
+    let trimmed = req.query.trim();
+    if !trimmed.is_empty() {
+        parts.push(format!("({trimmed})"));
+    }
+    if let Some(author) = req.author.as_ref().map(|a| a.trim()).filter(|a| !a.is_empty()) {
+        parts.push(format!("creator:({author})"));
+    }
+    if req.year_from.is_some() || req.year_to.is_some() {
+        let from = req.year_from.unwrap_or(0);
+        let to = req.year_to.unwrap_or(9999);
+        if from <= to {
+            parts.push(format!("year:[{from} TO {to}]"));
+        }
+    }
+    let q = parts.join(" AND ");
     let start = (req.page.saturating_sub(1)) * req.rows;
 
     let client = reqwest::Client::new();
-    let resp: serde_json::Value = client
+    let mut request = client
         .get("https://archive.org/advancedsearch.php")
         .query(&[
             ("q", q.as_str()),
@@ -182,11 +193,25 @@ pub async fn search_books(req: &crate::commands::search::SearchRequest) -> Resul
             ("fl[]", "creator"),
             ("fl[]", "year"),
             ("fl[]", "description"),
-        ])
-        .send()
-        .await?
-        .json()
-        .await?;
+        ]);
+
+    match req.sort.as_deref() {
+        Some("downloads") => {
+            request = request.query(&[("sort[]", "downloads desc")]);
+        }
+        Some("title") => {
+            request = request.query(&[("sort[]", "titleSorter asc")]);
+        }
+        Some("newest") => {
+            request = request.query(&[("sort[]", "date desc")]);
+        }
+        Some("oldest") => {
+            request = request.query(&[("sort[]", "date asc")]);
+        }
+        _ => {}
+    }
+
+    let resp: serde_json::Value = request.send().await?.json().await?;
 
     let response = resp
         .get("response")
